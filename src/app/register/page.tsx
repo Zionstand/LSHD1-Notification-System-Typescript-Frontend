@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { api } from '@/lib/api';
-import type { UserRoleType, Facility } from '@/types';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { api } from "@/lib/api";
+import type { UserRoleType } from "@/types";
 
 interface FormData {
   fullName: string;
@@ -29,95 +29,109 @@ interface FormErrors {
 }
 
 const ROLES: { value: UserRoleType; label: string }[] = [
-  { value: 'admin', label: 'Administrator' },
-  { value: 'him_officer', label: 'HIM Officer' },
-  { value: 'doctor', label: 'Doctor' },
-  { value: 'nurse', label: 'Nurse' },
-  { value: 'lab_scientist', label: 'Lab Scientist' },
+  { value: "admin", label: "Administrator" },
+  { value: "him_officer", label: "HIM Officer" },
+  { value: "doctor", label: "Doctor" },
+  { value: "cho", label: "Community Health Officer (CHO)" },
+  { value: "nurse", label: "Nurse" },
+  { value: "mls", label: "Medical Lab Scientist (MLS)" },
 ];
 
 export default function RegisterPage() {
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>({
-    fullName: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: '',
-    role: 'admin',
-    phcCenterId: '',
-    staffId: '',
+    fullName: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+    role: "admin",
+    phcCenterId: "",
+    staffId: "",
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [facilities, setFacilities] = useState<{ id: number; name: string }[]>(
+    []
+  );
+  const [facilitiesLoading, setFacilitiesLoading] = useState(false);
 
   useEffect(() => {
     // Check if user is already logged in
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) {
-      router.push('/dashboard');
+      router.push("/dashboard");
     }
   }, [router]);
 
+  console.log("first");
+
   useEffect(() => {
-    // Fetch facilities for non-admin roles
+    // Fetch facilities for non-admin roles using public endpoint
     const fetchFacilities = async () => {
+      if (facilities.length > 0) return; // Already fetched
+
+      setFacilitiesLoading(true);
       try {
-        const data = await api.getFacilities();
+        const data = await api.getPublicFacilities();
+
+        console.log(data);
+
         setFacilities(data);
       } catch (error) {
-        console.error('Failed to fetch facilities:', error);
+        console.error("Failed to fetch facilities:", error);
+      } finally {
+        setFacilitiesLoading(false);
       }
     };
 
-    if (formData.role !== 'admin') {
+    if (formData.role !== "admin") {
       fetchFacilities();
     }
-  }, [formData.role]);
+  }, [formData.role, facilities.length]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
     if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
+      newErrors.fullName = "Full name is required";
     } else if (formData.fullName.trim().length < 2) {
-      newErrors.fullName = 'Full name must be at least 2 characters';
+      newErrors.fullName = "Full name must be at least 2 characters";
     }
 
     if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
+      newErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = "Please enter a valid email address";
     }
 
     if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
+      newErrors.phone = "Phone number is required";
     } else if (!/^[0-9+\-\s()]+$/.test(formData.phone)) {
-      newErrors.phone = 'Please enter a valid phone number';
+      newErrors.phone = "Please enter a valid phone number";
     }
 
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = "Password is required";
     } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+      newErrors.password = "Password must be at least 8 characters";
     }
 
     if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
+      newErrors.confirmPassword = "Please confirm your password";
     } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = "Passwords do not match";
     }
 
     if (!formData.role) {
-      newErrors.role = 'Please select a role';
+      newErrors.role = "Please select a role";
     }
 
     // Require facility for non-admin roles
-    if (formData.role !== 'admin' && !formData.phcCenterId) {
-      newErrors.phcCenterId = 'Please select a facility';
+    if (formData.role !== "admin" && !formData.phcCenterId) {
+      newErrors.phcCenterId = "Please select a facility";
     }
 
     setErrors(newErrors);
@@ -155,30 +169,34 @@ export default function RegisterPage() {
         phone: formData.phone.trim(),
         password: formData.password,
         role: formData.role,
-        phcCenterId: formData.phcCenterId ? parseInt(formData.phcCenterId) : undefined,
+        phcCenterId: formData.phcCenterId
+          ? parseInt(formData.phcCenterId)
+          : undefined,
         staffId: formData.staffId.trim() || undefined,
       });
 
       // If token is returned (admin), redirect to dashboard
       if (response.token) {
-        router.push('/dashboard');
+        router.push("/dashboard");
       } else {
         // For non-admin roles, show success message
         setSuccessMessage(response.message);
         setFormData({
-          fullName: '',
-          email: '',
-          phone: '',
-          password: '',
-          confirmPassword: '',
-          role: 'admin',
-          phcCenterId: '',
-          staffId: '',
+          fullName: "",
+          email: "",
+          phone: "",
+          password: "",
+          confirmPassword: "",
+          role: "admin",
+          phcCenterId: "",
+          staffId: "",
         });
       }
     } catch (error) {
       setSubmitError(
-        error instanceof Error ? error.message : 'Registration failed. Please try again.'
+        error instanceof Error
+          ? error.message
+          : "Registration failed. Please try again."
       );
     } finally {
       setLoading(false);
@@ -226,7 +244,7 @@ export default function RegisterPage() {
               value={formData.fullName}
               onChange={handleChange}
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                errors.fullName ? 'border-red-500' : 'border-gray-300'
+                errors.fullName ? "border-red-500" : "border-gray-300"
               }`}
               placeholder="Enter your full name"
             />
@@ -250,7 +268,7 @@ export default function RegisterPage() {
               value={formData.email}
               onChange={handleChange}
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                errors.email ? 'border-red-500' : 'border-gray-300'
+                errors.email ? "border-red-500" : "border-gray-300"
               }`}
               placeholder="Enter your email"
             />
@@ -274,7 +292,7 @@ export default function RegisterPage() {
               value={formData.phone}
               onChange={handleChange}
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                errors.phone ? 'border-red-500' : 'border-gray-300'
+                errors.phone ? "border-red-500" : "border-gray-300"
               }`}
               placeholder="Enter your phone number"
             />
@@ -297,7 +315,7 @@ export default function RegisterPage() {
               value={formData.role}
               onChange={handleChange}
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                errors.role ? 'border-red-500' : 'border-gray-300'
+                errors.role ? "border-red-500" : "border-gray-300"
               }`}
             >
               {ROLES.map((role) => (
@@ -312,7 +330,7 @@ export default function RegisterPage() {
           </div>
 
           {/* Facility (for non-admin roles) */}
-          {formData.role !== 'admin' && (
+          {formData.role !== "admin" && (
             <div>
               <label
                 htmlFor="phcCenterId"
@@ -325,11 +343,16 @@ export default function RegisterPage() {
                 name="phcCenterId"
                 value={formData.phcCenterId}
                 onChange={handleChange}
+                disabled={facilitiesLoading}
                 className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.phcCenterId ? 'border-red-500' : 'border-gray-300'
-                }`}
+                  errors.phcCenterId ? "border-red-500" : "border-gray-300"
+                } ${facilitiesLoading ? "bg-gray-100 cursor-wait" : ""}`}
               >
-                <option value="">Select a facility</option>
+                <option value="">
+                  {facilitiesLoading
+                    ? "Loading facilities..."
+                    : "Select a facility"}
+                </option>
                 {facilities.map((facility) => (
                   <option key={facility.id} value={facility.id}>
                     {facility.name}
@@ -337,7 +360,9 @@ export default function RegisterPage() {
                 ))}
               </select>
               {errors.phcCenterId && (
-                <p className="mt-1 text-sm text-red-600">{errors.phcCenterId}</p>
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.phcCenterId}
+                </p>
               )}
             </div>
           )}
@@ -357,7 +382,7 @@ export default function RegisterPage() {
               value={formData.staffId}
               onChange={handleChange}
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                errors.staffId ? 'border-red-500' : 'border-gray-300'
+                errors.staffId ? "border-red-500" : "border-gray-300"
               }`}
               placeholder="Enter your staff ID"
             />
@@ -381,7 +406,7 @@ export default function RegisterPage() {
               value={formData.password}
               onChange={handleChange}
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                errors.password ? 'border-red-500' : 'border-gray-300'
+                errors.password ? "border-red-500" : "border-gray-300"
               }`}
               placeholder="Create a password (min. 8 characters)"
             />
@@ -405,19 +430,22 @@ export default function RegisterPage() {
               value={formData.confirmPassword}
               onChange={handleChange}
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
+                errors.confirmPassword ? "border-red-500" : "border-gray-300"
               }`}
               placeholder="Confirm your password"
             />
             {errors.confirmPassword && (
-              <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
+              <p className="mt-1 text-sm text-red-600">
+                {errors.confirmPassword}
+              </p>
             )}
           </div>
 
           {/* Info box for non-admin roles */}
-          {formData.role !== 'admin' && (
+          {formData.role !== "admin" && (
             <div className="p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm">
-              <strong>Note:</strong> Non-admin accounts require approval by an administrator before you can log in.
+              <strong>Note:</strong> Non-admin accounts require approval by an
+              administrator before you can log in.
             </div>
           )}
 
@@ -452,14 +480,17 @@ export default function RegisterPage() {
                 Creating Account...
               </span>
             ) : (
-              'Create Account'
+              "Create Account"
             )}
           </button>
         </form>
 
         <p className="mt-6 text-center text-gray-600">
-          Already have an account?{' '}
-          <Link href="/" className="text-blue-600 hover:text-blue-800 font-medium">
+          Already have an account?{" "}
+          <Link
+            href="/"
+            className="text-blue-600 hover:text-blue-800 font-medium"
+          >
             Sign in
           </Link>
         </p>

@@ -5,6 +5,7 @@ import type {
   RegisterResponse,
   Patient,
   CreatePatientDto,
+  CreatePatientResponse,
   Screening,
   CreateScreeningDto,
   UpdateVitalsDto,
@@ -29,6 +30,13 @@ import type {
   PsaScreeningData,
   CreatePsaScreeningDto,
   PathwayDataResponse,
+  // User management types
+  StaffUser,
+  UserActionResponse,
+  UserStatus,
+  // Follow-up types
+  CreateFollowupDto,
+  FollowupAppointment,
 } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -57,13 +65,13 @@ class APIClient {
     }
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}, skipAuth = false): Promise<T> {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
 
-    if (this.token) {
+    if (this.token && !skipAuth) {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`;
     }
 
@@ -133,7 +141,7 @@ class APIClient {
     return this.request<Patient>(`/clients/${id}`);
   }
 
-  async createClient(data: CreatePatientDto): Promise<{ message: string; client: Patient }> {
+  async createClient(data: CreatePatientDto): Promise<CreatePatientResponse> {
     return this.request('/clients', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -148,6 +156,31 @@ class APIClient {
 
   async getScreening(id: number | string): Promise<Screening> {
     return this.request<Screening>(`/screenings/${id}`);
+  }
+
+  async getPatientScreenings(patientId: number): Promise<Screening[]> {
+    return this.request<Screening[]>(`/screenings/patient/${patientId}`);
+  }
+
+  async getPendingDoctorReview(): Promise<Screening[]> {
+    return this.request<Screening[]>('/screenings/doctor/pending');
+  }
+
+  async addDoctorAssessment(
+    screeningId: number,
+    data: {
+      clinicalAssessment: string;
+      recommendations?: string;
+      prescription?: string;
+      patientStatus?: 'normal' | 'abnormal' | 'critical' | 'requires_followup';
+      referralFacility?: string;
+      nextAppointment?: string;
+    }
+  ): Promise<{ message: string; screening: { id: number; patientStatus: string; status: string; doctorAssessedAt: string } }> {
+    return this.request(`/screenings/${screeningId}/doctor-assessment`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async createScreening(data: CreateScreeningDto): Promise<{ message: string; session: { id: number; sessionId: string; status: string } }> {
@@ -179,6 +212,11 @@ class APIClient {
   // Reference data endpoints
   async getNotificationTypes(): Promise<NotificationType[]> {
     return this.request<NotificationType[]>('/notification-types');
+  }
+
+  // Public facilities endpoint (no auth required) - for registration page
+  async getPublicFacilities(): Promise<Pick<Facility, 'id' | 'name'>[]> {
+    return this.request<Pick<Facility, 'id' | 'name'>[]>('/facilities/public', {}, true);
   }
 
   async getFacilities(includeInactive?: boolean): Promise<Facility[]> {
@@ -268,6 +306,19 @@ class APIClient {
     return this.request(`/appointments/${id}/no-show`, {
       method: 'PUT',
     });
+  }
+
+  // ==================== FOLLOW-UP APPOINTMENT ENDPOINTS ====================
+
+  async createFollowup(data: CreateFollowupDto): Promise<{ message: string; appointment: FollowupAppointment }> {
+    return this.request('/appointments/followup', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getFollowupsByPatient(patientId: number): Promise<FollowupAppointment[]> {
+    return this.request<FollowupAppointment[]>(`/appointments/followups/patient/${patientId}`);
   }
 
   // ==================== PATHWAY SCREENING ENDPOINTS ====================
@@ -369,6 +420,45 @@ class APIClient {
     return this.request(`/screenings/${screeningId}/psa`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  }
+
+  // ==================== USER MANAGEMENT ENDPOINTS ====================
+
+  async getUsers(status?: UserStatus): Promise<StaffUser[]> {
+    const query = status ? `?status=${status}` : '';
+    return this.request<StaffUser[]>(`/users${query}`);
+  }
+
+  async getPendingUsers(): Promise<StaffUser[]> {
+    return this.request<StaffUser[]>('/users/pending');
+  }
+
+  async getUser(id: number): Promise<StaffUser> {
+    return this.request<StaffUser>(`/users/${id}`);
+  }
+
+  async approveUser(id: number): Promise<UserActionResponse> {
+    return this.request<UserActionResponse>(`/users/${id}/approve`, {
+      method: 'PUT',
+    });
+  }
+
+  async rejectUser(id: number): Promise<UserActionResponse> {
+    return this.request<UserActionResponse>(`/users/${id}/reject`, {
+      method: 'PUT',
+    });
+  }
+
+  async suspendUser(id: number): Promise<UserActionResponse> {
+    return this.request<UserActionResponse>(`/users/${id}/suspend`, {
+      method: 'PUT',
+    });
+  }
+
+  async reactivateUser(id: number): Promise<UserActionResponse> {
+    return this.request<UserActionResponse>(`/users/${id}/reactivate`, {
+      method: 'PUT',
     });
   }
 }

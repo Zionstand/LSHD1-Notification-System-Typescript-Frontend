@@ -55,7 +55,8 @@ export type UserRoleType =
   | 'him_officer'
   | 'nurse'
   | 'doctor'
-  | 'lab_scientist';
+  | 'mls'
+  | 'cho';
 
 export interface RegisterDto {
   fullName: string;
@@ -83,27 +84,49 @@ export interface RegisterResponse {
 export interface Patient {
   id: number;
   client_id: string;
+  full_name: string;
   first_name: string;
   last_name: string;
-  date_of_birth: string;
+  age: number;
+  date_of_birth: string | null;
   gender: string;
-  phone: string | null;
-  address: string | null;
+  phone: string;
+  address: string;
+  next_of_kin: string;
+  next_of_kin_phone: string;
+  facility_id: number;
   facility_name: string | null;
+  lga: string | null;
   created_at: string;
 }
 
 export interface CreatePatientDto {
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
+  fullName: string;
+  phone: string;
+  age: number;
   gender: string;
-  phone?: string;
-  address?: string;
+  phcCenterId: number;
+  address: string;
+  screeningTypeId: number;
+  nextOfKin: string;
+  nextOfKinPhone: string;
+  email?: string;
+  altPhone?: string;
+  lga?: string;
+}
+
+export interface CreatePatientResponse {
+  message: string;
+  client: Patient;
+  screening: {
+    id: number;
+    sessionId: string;
+    status: string;
+  };
 }
 
 // Screening types
-export type ScreeningStatus = 'pending' | 'in_progress' | 'completed';
+export type ScreeningStatus = 'pending' | 'in_progress' | 'completed' | 'follow_up';
 
 export interface ScreeningClient {
   id: number;
@@ -118,6 +141,17 @@ export interface NotificationType {
   pathway: string;
 }
 
+export interface ScreeningVitals {
+  bloodPressureSystolic?: number;
+  bloodPressureDiastolic?: number;
+  temperature?: number;
+  pulseRate?: number;
+  respiratoryRate?: number;
+  weight?: number;
+  height?: number;
+  bmi?: number;
+}
+
 export interface Screening {
   id: number;
   sessionId: string;
@@ -127,6 +161,14 @@ export interface Screening {
   notificationType: NotificationType;
   facility: {
     name: string;
+  };
+  conductedBy?: string;
+  vitals?: ScreeningVitals;
+  results?: {
+    diagnosis?: string;
+    prescription?: string;
+    recommendations?: string;
+    nextAppointment?: string;
   };
 }
 
@@ -427,4 +469,50 @@ export interface CreatePsaScreeningDto {
 export interface PathwayDataResponse {
   pathway: 'hypertension' | 'diabetes' | 'cervical' | 'breast' | 'psa' | null;
   data: HypertensionScreeningData | DiabetesScreeningData | CervicalScreeningData | BreastScreeningData | PsaScreeningData | null;
+}
+
+// Staff/User management types
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
+
+export interface StaffUser {
+  id: number;
+  email: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  staffId: string | null;
+  status: UserStatus;
+  isActive: boolean;
+  role: UserRoleType;
+  facilityId: number | null;
+  facility: string | null;
+  createdAt: string;
+  approvedAt: string | null;
+}
+
+export interface UserActionResponse {
+  message: string;
+  user: StaffUser;
+}
+
+// Follow-up types
+export interface CreateFollowupDto {
+  clientId: number;
+  screeningId?: number;
+  followupDate: string;
+  followupTime?: string;
+  followupType: string;
+  followupInstructions?: string;
+  sendSmsReminder?: boolean;
+  reminderDaysBefore?: number;
+}
+
+export interface FollowupAppointment extends Appointment {
+  isFollowup: boolean;
+  followupInstructions: string | null;
+  sendSmsReminder: boolean;
+  reminderDaysBefore: number;
+  reminderScheduledDate: string | null;
+  screeningId: number | null;
 }

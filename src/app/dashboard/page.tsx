@@ -3,7 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import type { User, DashboardStats, Patient, Screening, NotificationType, CreatePatientDto, Appointment, CreateAppointmentDto, Facility, CreateFacilityDto } from '@/types';
+import type { User, DashboardStats, Patient, Screening, NotificationType, CreatePatientDto, Appointment, CreateAppointmentDto, Facility, CreateFacilityDto, StaffUser, UserStatus } from '@/types';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -19,16 +19,20 @@ export default function DashboardPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [notificationTypes, setNotificationTypes] = useState<NotificationType[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'clients' | 'screenings' | 'appointments' | 'phc_centers'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'clients' | 'screenings' | 'appointments' | 'phc_centers' | 'staff'>('dashboard');
   const [loading, setLoading] = useState(true);
   const [showClientModal, setShowClientModal] = useState(false);
   const [showScreeningModal, setShowScreeningModal] = useState(false);
   const [newClient, setNewClient] = useState<CreatePatientDto>({
-    firstName: '',
-    lastName: '',
-    dateOfBirth: '',
-    gender: 'Male',
+    fullName: '',
     phone: '',
+    age: 0,
+    gender: 'Male',
+    phcCenterId: 0,
+    address: '',
+    screeningTypeId: 0,
+    nextOfKin: '',
+    nextOfKinPhone: '',
   });
   const [newScreening, setNewScreening] = useState({ clientId: '', notificationTypeId: '' });
   const [clientError, setClientError] = useState<string | null>(null);
@@ -53,6 +57,10 @@ export default function DashboardPage() {
   });
   const [facilityError, setFacilityError] = useState<string | null>(null);
   const [facilityLoading, setFacilityLoading] = useState(false);
+  // Staff management state
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [staffFilter, setStaffFilter] = useState<UserStatus | 'all'>('all');
+  const [staffActionLoading, setStaffActionLoading] = useState<number | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -61,19 +69,52 @@ export default function DashboardPage() {
       router.push('/');
       return;
     }
-    setUser(JSON.parse(userData));
+    const parsedUser = JSON.parse(userData);
+    setUser(parsedUser);
+
+    // Redirect HIM officers to their dedicated dashboard
+    if (parsedUser.role?.id === 'him_officer') {
+      router.push('/dashboard/him');
+      return;
+    }
+
+    // Redirect nurses to their dedicated dashboard
+    if (parsedUser.role?.id === 'nurse') {
+      router.push('/dashboard/nurse');
+      return;
+    }
+
+    // Redirect doctors to their dedicated dashboard
+    if (parsedUser.role?.id === 'doctor') {
+      router.push('/dashboard/doctor');
+      return;
+    }
+
+    // Redirect CHO to their dedicated dashboard
+    if (parsedUser.role?.id === 'cho') {
+      router.push('/dashboard/cho');
+      return;
+    }
+
+    // Redirect MLS to their dedicated dashboard
+    if (parsedUser.role?.id === 'mls') {
+      router.push('/dashboard/mls');
+      return;
+    }
+
     fetchData();
   }, [router]);
 
   const fetchData = async () => {
     try {
-      const [statsData, clientsData, screeningsData, typesData, appointmentsData, facilitiesData] = await Promise.all([
+      const [statsData, clientsData, screeningsData, typesData, appointmentsData, facilitiesData, staffData] = await Promise.all([
         api.getDashboardStats(),
         api.getClients(),
         api.getScreenings(),
         api.getNotificationTypes(),
         api.getAppointments(),
         api.getFacilities(true),
+        api.getUsers(),
       ]);
       setStats(statsData);
       setClients(clientsData);
@@ -81,6 +122,7 @@ export default function DashboardPage() {
       setNotificationTypes(typesData);
       setAppointments(appointmentsData);
       setFacilities(facilitiesData);
+      setStaffUsers(staffData);
     } catch (err) {
       console.error('Fetch error:', err);
     }
@@ -99,7 +141,17 @@ export default function DashboardPage() {
     try {
       await api.createClient(newClient);
       setShowClientModal(false);
-      setNewClient({ firstName: '', lastName: '', dateOfBirth: '', gender: 'Male', phone: '' });
+      setNewClient({
+        fullName: '',
+        phone: '',
+        age: 0,
+        gender: 'Male',
+        phcCenterId: 0,
+        address: '',
+        screeningTypeId: 0,
+        nextOfKin: '',
+        nextOfKinPhone: '',
+      });
       fetchData();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create client';
@@ -218,6 +270,90 @@ export default function DashboardPage() {
     }
   };
 
+  // Staff management handlers
+  const handleApproveUser = async (id: number) => {
+    setStaffActionLoading(id);
+    try {
+      await api.approveUser(id);
+      fetchData();
+    } catch (err) {
+      console.error('Approve user error:', err);
+    } finally {
+      setStaffActionLoading(null);
+    }
+  };
+
+  const handleRejectUser = async (id: number) => {
+    setStaffActionLoading(id);
+    try {
+      await api.rejectUser(id);
+      fetchData();
+    } catch (err) {
+      console.error('Reject user error:', err);
+    } finally {
+      setStaffActionLoading(null);
+    }
+  };
+
+  const handleSuspendUser = async (id: number) => {
+    setStaffActionLoading(id);
+    try {
+      await api.suspendUser(id);
+      fetchData();
+    } catch (err) {
+      console.error('Suspend user error:', err);
+    } finally {
+      setStaffActionLoading(null);
+    }
+  };
+
+  const handleReactivateUser = async (id: number) => {
+    setStaffActionLoading(id);
+    try {
+      await api.reactivateUser(id);
+      fetchData();
+    } catch (err) {
+      console.error('Reactivate user error:', err);
+    } finally {
+      setStaffActionLoading(null);
+    }
+  };
+
+  const filteredStaffUsers = staffFilter === 'all'
+    ? staffUsers
+    : staffUsers.filter(u => u.status === staffFilter);
+
+  const pendingCount = staffUsers.filter(u => u.status === 'pending').length;
+
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case 'admin': return 'bg-purple-100 text-purple-700';
+      case 'him_officer': return 'bg-blue-100 text-blue-700';
+      case 'doctor': return 'bg-green-100 text-green-700';
+      case 'cho': return 'bg-teal-100 text-teal-700';
+      case 'nurse': return 'bg-pink-100 text-pink-700';
+      case 'mls': return 'bg-orange-100 text-orange-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'approved': return 'bg-green-100 text-green-700';
+      case 'pending': return 'bg-yellow-100 text-yellow-700';
+      case 'rejected': return 'bg-red-100 text-red-700';
+      case 'suspended': return 'bg-gray-100 text-gray-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const formatRoleName = (role: string) => {
+    // Handle special role names
+    if (role === 'mls') return 'Medical Lab Scientist';
+    if (role === 'cho') return 'Community Health Officer';
+    return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -262,17 +398,22 @@ export default function DashboardPage() {
       <nav className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex gap-1">
-            {(['dashboard', 'clients', 'screenings', 'appointments', 'phc_centers'] as const).map((tab) => (
+            {(['dashboard', 'clients', 'screenings', 'appointments', 'phc_centers', 'staff'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 font-medium ${
+                className={`px-4 py-3 font-medium flex items-center gap-2 ${
                   activeTab === tab
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {tab === 'phc_centers' ? 'PHC Centers' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'staff' && pendingCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                    {pendingCount}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -378,23 +519,21 @@ export default function DashboardPage() {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client ID</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gender</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">DOB</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Facility</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {clients.map((c) => (
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{c.client_id}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {c.first_name} {c.last_name}
-                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{c.full_name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{c.age}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.gender}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {new Date(c.date_of_birth).toLocaleDateString()}
-                      </td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.phone || '-'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{c.facility_name || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -622,12 +761,152 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* Staff Management Tab */}
+        {activeTab === 'staff' && (
+          <div className="space-y-6">
+            {/* Pending Approvals Alert */}
+            {pendingCount > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-3">
+                <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                  <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-yellow-800">{pendingCount} staff member{pendingCount > 1 ? 's' : ''} awaiting approval</p>
+                  <p className="text-sm text-yellow-600">Review and approve pending registrations below</p>
+                </div>
+                <button
+                  onClick={() => setStaffFilter('pending')}
+                  className="ml-auto px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm"
+                >
+                  View Pending
+                </button>
+              </div>
+            )}
+
+            {/* Staff List */}
+            <div className="bg-white rounded-xl shadow">
+              <div className="p-6 border-b flex justify-between items-center">
+                <h2 className="text-lg font-semibold">Staff Management</h2>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-500">Filter:</label>
+                  <select
+                    value={staffFilter}
+                    onChange={(e) => setStaffFilter(e.target.value as UserStatus | 'all')}
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="all">All Staff</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Facility</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Registered</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredStaffUsers.map((staff) => (
+                      <tr key={staff.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{staff.fullName}</p>
+                            {staff.staffId && (
+                              <p className="text-xs text-gray-500">ID: {staff.staffId}</p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{staff.email}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{staff.phone}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 rounded-full text-xs ${getRoleBadgeColor(staff.role)}`}>
+                            {formatRoleName(staff.role)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{staff.facility || '-'}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadgeColor(staff.status)}`}>
+                            {staff.status.charAt(0).toUpperCase() + staff.status.slice(1)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {new Date(staff.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            {staffActionLoading === staff.id ? (
+                              <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <>
+                                {staff.status === 'pending' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleApproveUser(staff.id)}
+                                      className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
+                                    >
+                                      Approve
+                                    </button>
+                                    <button
+                                      onClick={() => handleRejectUser(staff.id)}
+                                      className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                    >
+                                      Reject
+                                    </button>
+                                  </>
+                                )}
+                                {staff.status === 'approved' && staff.role !== 'admin' && (
+                                  <button
+                                    onClick={() => handleSuspendUser(staff.id)}
+                                    className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                                  >
+                                    Suspend
+                                  </button>
+                                )}
+                                {(staff.status === 'suspended' || staff.status === 'rejected') && (
+                                  <button
+                                    onClick={() => handleReactivateUser(staff.id)}
+                                    className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                                  >
+                                    Reactivate
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredStaffUsers.length === 0 && (
+                  <p className="text-gray-500 text-center py-8">
+                    {staffFilter === 'all' ? 'No staff members found' : `No ${staffFilter} staff members`}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Create Client Modal */}
       {showClientModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Register New Client</h3>
             {clientError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
@@ -636,57 +915,132 @@ export default function DashboardPage() {
             )}
             <form onSubmit={handleCreateClient} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                   <input
                     type="text"
                     required
-                    value={newClient.firstName}
-                    onChange={(e) => setNewClient({ ...newClient, firstName: e.target.value })}
+                    value={newClient.fullName}
+                    onChange={(e) => setNewClient({ ...newClient, fullName: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter full name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
                   <input
-                    type="text"
+                    type="tel"
                     required
-                    value={newClient.lastName}
-                    onChange={(e) => setNewClient({ ...newClient, lastName: e.target.value })}
+                    value={newClient.phone}
+                    onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. 08012345678"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Age *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    max="150"
+                    value={newClient.age || ''}
+                    onChange={(e) => setNewClient({ ...newClient, age: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter age"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Gender *</label>
+                  <select
+                    required
+                    value={newClient.gender}
+                    onChange={(e) => setNewClient({ ...newClient, gender: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">PHC Center *</label>
+                  <select
+                    required
+                    value={newClient.phcCenterId || ''}
+                    onChange={(e) => setNewClient({ ...newClient, phcCenterId: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Select PHC Center --</option>
+                    {facilities.filter(f => f.status === 'active').map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
+                  <textarea
+                    required
+                    value={newClient.address}
+                    onChange={(e) => setNewClient({ ...newClient, address: e.target.value })}
+                    rows={2}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter client address"
                   />
                 </div>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
-                <input
-                  type="date"
-                  required
-                  value={newClient.dateOfBirth}
-                  onChange={(e) => setNewClient({ ...newClient, dateOfBirth: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Screening Type *</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {notificationTypes.map((type) => (
+                    <label
+                      key={type.id}
+                      className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
+                        newClient.screeningTypeId === type.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="screeningType"
+                        value={type.id}
+                        checked={newClient.screeningTypeId === type.id}
+                        onChange={(e) => setNewClient({ ...newClient, screeningTypeId: parseInt(e.target.value) })}
+                        className="h-4 w-4 text-blue-600"
+                        required
+                      />
+                      <span className="ml-3 text-sm font-medium text-gray-700">{type.name}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Gender *</label>
-                <select
-                  value={newClient.gender}
-                  onChange={(e) => setNewClient({ ...newClient, gender: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                </select>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Next of Kin Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newClient.nextOfKin}
+                    onChange={(e) => setNewClient({ ...newClient, nextOfKin: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter next of kin name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Next of Kin Phone *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={newClient.nextOfKinPhone}
+                    onChange={(e) => setNewClient({ ...newClient, nextOfKinPhone: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. 08012345678"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input
-                  type="tel"
-                  value={newClient.phone}
-                  onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
