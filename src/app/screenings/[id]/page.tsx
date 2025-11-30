@@ -1038,7 +1038,7 @@ export default function ScreeningDetailPage() {
                 )}
               </div>
             </div>
-          ) : screening.status === 'pending' ? (
+          ) : screening.status === 'pending' || screening.status === 'in_progress' ? (
             // Show form to complete screening
             <div>
               {!showPathwayForm ? (
@@ -1047,7 +1047,9 @@ export default function ScreeningDetailPage() {
                     Ready to Complete {screening.notificationType?.name}
                   </h2>
                   <p className="text-gray-600 mb-6">
-                    Click the button below to enter the screening results.
+                    {screening.status === 'in_progress'
+                      ? 'Vitals have been recorded. Click the button below to complete the screening.'
+                      : 'Click the button below to enter the screening results.'}
                   </p>
                   <button
                     onClick={() => setShowPathwayForm(true)}

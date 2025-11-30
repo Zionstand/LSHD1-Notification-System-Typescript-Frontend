@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { hasPermission } from "@/lib/permissions";
 import type {
   Patient,
   User,
@@ -12,6 +13,7 @@ import type {
   Laterality,
   CreateFollowupDto,
   FollowupAppointment,
+  UserRoleType,
 } from "@/types";
 
 interface ScreeningHistory {
@@ -97,6 +99,28 @@ export default function PatientHistoryPage() {
     reminderDaysBefore: 1,
   });
 
+  // SMS modal state
+  const [showSmsModal, setShowSmsModal] = useState(false);
+  const [smsLoading, setSmsLoading] = useState(false);
+  const [smsError, setSmsError] = useState<string | null>(null);
+  const [smsSuccess, setSmsSuccess] = useState(false);
+  const [smsMessage, setSmsMessage] = useState("");
+
+  // Doctor's Note modal state
+  const [showDoctorNoteModal, setShowDoctorNoteModal] = useState(false);
+  const [selectedScreeningForNote, setSelectedScreeningForNote] = useState<ScreeningHistory | null>(null);
+  const [doctorNoteLoading, setDoctorNoteLoading] = useState(false);
+  const [doctorNoteError, setDoctorNoteError] = useState<string | null>(null);
+  const [doctorNoteSuccess, setDoctorNoteSuccess] = useState(false);
+  const [doctorNoteForm, setDoctorNoteForm] = useState({
+    clinicalAssessment: "",
+    recommendations: "",
+    prescription: "",
+    patientStatus: "normal" as "normal" | "abnormal" | "critical" | "requires_followup",
+    referralFacility: "",
+    nextAppointment: "",
+  });
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     const userData = localStorage.getItem("user");
@@ -134,12 +158,10 @@ export default function PatientHistoryPage() {
 
   const handleBack = () => {
     // Go back to the appropriate dashboard based on user role
-    if (user?.role?.id === "nurse") {
-      router.push("/dashboard/nurse");
-    } else if (user?.role?.id === "him_officer") {
-      router.push("/dashboard/him");
-    } else {
+    if (user?.role?.id === "admin") {
       router.push("/dashboard");
+    } else {
+      router.push("/dashboard/clinical");
     }
   };
 
@@ -227,6 +249,100 @@ export default function PatientHistoryPage() {
       setFollowupLoading(false);
     }
   };
+
+  const openSmsModal = () => {
+    setSmsMessage("");
+    setSmsError(null);
+    setSmsSuccess(false);
+    setShowSmsModal(true);
+  };
+
+  const handleSendSms = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!patient || !smsMessage.trim()) return;
+
+    setSmsLoading(true);
+    setSmsError(null);
+
+    try {
+      const result = await api.sendManualSms(patient.id, smsMessage);
+      if (result.success) {
+        setSmsSuccess(true);
+        setTimeout(() => {
+          setShowSmsModal(false);
+          setSmsSuccess(false);
+          setSmsMessage("");
+        }, 1500);
+      } else {
+        setSmsError(result.message || "Failed to send SMS");
+      }
+    } catch (err) {
+      setSmsError(
+        err instanceof Error ? err.message : "Failed to send SMS"
+      );
+    } finally {
+      setSmsLoading(false);
+    }
+  };
+
+  // Open doctor's note modal
+  const openDoctorNoteModal = (screening: ScreeningHistory) => {
+    setSelectedScreeningForNote(screening);
+    setDoctorNoteForm({
+      clinicalAssessment: screening.results?.diagnosis || "",
+      recommendations: screening.results?.recommendations || "",
+      prescription: screening.results?.prescription || "",
+      patientStatus: "normal",
+      referralFacility: "",
+      nextAppointment: screening.results?.nextAppointment || "",
+    });
+    setDoctorNoteError(null);
+    setDoctorNoteSuccess(false);
+    setShowDoctorNoteModal(true);
+  };
+
+  // Handle doctor's note submission
+  const handleSaveDoctorNote = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedScreeningForNote) return;
+
+    if (!doctorNoteForm.clinicalAssessment.trim()) {
+      setDoctorNoteError("Clinical assessment is required");
+      return;
+    }
+
+    setDoctorNoteLoading(true);
+    setDoctorNoteError(null);
+
+    try {
+      await api.addDoctorAssessment(selectedScreeningForNote.id, {
+        clinicalAssessment: doctorNoteForm.clinicalAssessment,
+        recommendations: doctorNoteForm.recommendations || undefined,
+        prescription: doctorNoteForm.prescription || undefined,
+        patientStatus: doctorNoteForm.patientStatus,
+        referralFacility: doctorNoteForm.referralFacility || undefined,
+        nextAppointment: doctorNoteForm.nextAppointment || undefined,
+      });
+
+      setDoctorNoteSuccess(true);
+      fetchData();
+
+      setTimeout(() => {
+        setShowDoctorNoteModal(false);
+        setSelectedScreeningForNote(null);
+        setDoctorNoteSuccess(false);
+      }, 1500);
+    } catch (err) {
+      setDoctorNoteError(
+        err instanceof Error ? err.message : "Failed to save doctor's note"
+      );
+    } finally {
+      setDoctorNoteLoading(false);
+    }
+  };
+
+  // Get user's role for permission checks
+  const userRole = user?.role?.id as UserRoleType | undefined;
 
   const getBpCategory = (
     systolic?: number,
@@ -392,6 +508,39 @@ export default function PatientHistoryPage() {
                     {patient.next_of_kin_phone || "N/A"}
                   </span>
                 </div>
+              </div>
+              {/* SMS Button */}
+              <div className="mt-4 pt-4 border-t">
+                <button
+                  onClick={openSmsModal}
+                  disabled={!patient.phone}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition ${
+                    patient.phone
+                      ? "bg-green-600 text-white hover:bg-green-700"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
+                  title={patient.phone ? "Send SMS to patient" : "No phone number available"}
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                    />
+                  </svg>
+                  Send SMS
+                </button>
+                {!patient.phone && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    No phone number on file
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -647,9 +796,32 @@ export default function PatientHistoryPage() {
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">
-                  Screening Results & Doctor's Notes
+                  Screening Results & Doctor&apos;s Notes
                 </h3>
               </div>
+
+              {/* List of screenings where doctor can add notes */}
+              {hasPermission(userRole, "assessment:create") && screenings.filter(s => s.status === "in_progress" || s.status === "completed").length > 0 && (
+                <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <h4 className="text-sm font-medium text-indigo-800 mb-3">Add Doctor&apos;s Note to Screening:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {screenings
+                      .filter(s => s.status === "in_progress" || s.status === "completed")
+                      .map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => openDoctorNoteModal(s)}
+                          className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          {s.notificationType.name} ({formatDate(s.screeningDate)})
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
 
               {screenings.filter(
                 (s) => s.results?.diagnosis || s.status === "completed"
@@ -1494,6 +1666,399 @@ export default function PatientHistoryPage() {
                     className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-purple-400"
                   >
                     {followupLoading ? "Scheduling..." : "Schedule Follow-up"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SMS Modal */}
+      {showSmsModal && patient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <svg
+                  className="w-6 h-6 text-green-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                  />
+                </svg>
+                Send SMS
+              </h3>
+              <button
+                onClick={() => setShowSmsModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-sm text-green-700">
+                <strong>To:</strong> {patient.full_name}
+              </p>
+              <p className="text-sm text-green-600">
+                <strong>Phone:</strong> {patient.phone}
+              </p>
+            </div>
+
+            {smsSuccess && (
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-2">
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                SMS sent successfully!
+              </div>
+            )}
+
+            {smsError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {smsError}
+              </div>
+            )}
+
+            {!smsSuccess && (
+              <form onSubmit={handleSendSms} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Message *
+                  </label>
+                  <textarea
+                    required
+                    value={smsMessage}
+                    onChange={(e) => setSmsMessage(e.target.value)}
+                    rows={4}
+                    maxLength={1000}
+                    placeholder="Type your message here..."
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {smsMessage.length}/1000 characters
+                  </p>
+                </div>
+
+                {/* Quick Templates */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quick Templates
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSmsMessage(
+                          `Dear ${patient.full_name}, this is a reminder about your upcoming appointment. Please visit your PHC center. - LSHD1`
+                        )
+                      }
+                      className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200"
+                    >
+                      Appointment Reminder
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSmsMessage(
+                          `Dear ${patient.full_name}, your test results are ready. Please visit your PHC center to collect them. - LSHD1`
+                        )
+                      }
+                      className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200"
+                    >
+                      Results Ready
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSmsMessage(
+                          `Dear ${patient.full_name}, please remember to take your medications as prescribed. - LSHD1`
+                        )
+                      }
+                      className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200"
+                    >
+                      Medication Reminder
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowSmsModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    disabled={smsLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={smsLoading || !smsMessage.trim()}
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-400 flex items-center justify-center gap-2"
+                  >
+                    {smsLoading ? (
+                      <>
+                        <svg
+                          className="animate-spin h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                          />
+                        </svg>
+                        Send SMS
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Doctor's Note Modal */}
+      {showDoctorNoteModal && selectedScreeningForNote && patient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl w-full max-w-2xl p-6 my-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Doctor&apos;s Assessment Note</h3>
+              <button
+                onClick={() => setShowDoctorNoteModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            {/* Patient & Screening Info */}
+            <div className="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-indigo-200 rounded-full flex items-center justify-center">
+                  <span className="text-indigo-700 font-bold text-lg">
+                    {patient.full_name?.split(" ").map((n) => n[0]).join("") || "P"}
+                  </span>
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900">{patient.full_name}</p>
+                  <p className="text-sm text-gray-500">
+                    ID: {patient.client_id} | {selectedScreeningForNote.notificationType.name}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Session: {selectedScreeningForNote.sessionId} | {formatDate(selectedScreeningForNote.screeningDate)}
+                  </p>
+                </div>
+                {selectedScreeningForNote.vitals?.bloodPressureSystolic && (
+                  <div className="text-right">
+                    <p className={`font-medium ${getBpCategory(selectedScreeningForNote.vitals.bloodPressureSystolic, selectedScreeningForNote.vitals.bloodPressureDiastolic).color}`}>
+                      BP: {selectedScreeningForNote.vitals.bloodPressureSystolic}/{selectedScreeningForNote.vitals.bloodPressureDiastolic}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {getBpCategory(selectedScreeningForNote.vitals.bloodPressureSystolic, selectedScreeningForNote.vitals.bloodPressureDiastolic).label}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {doctorNoteSuccess && (
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Doctor&apos;s note saved successfully!
+              </div>
+            )}
+
+            {doctorNoteError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {doctorNoteError}
+              </div>
+            )}
+
+            {!doctorNoteSuccess && (
+              <form onSubmit={handleSaveDoctorNote} className="space-y-4">
+                {/* Clinical Assessment */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Clinical Assessment *
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    placeholder="Enter clinical findings and assessment..."
+                    value={doctorNoteForm.clinicalAssessment}
+                    onChange={(e) => setDoctorNoteForm({ ...doctorNoteForm, clinicalAssessment: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {/* Recommendations */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Recommendations
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Enter treatment recommendations..."
+                    value={doctorNoteForm.recommendations}
+                    onChange={(e) => setDoctorNoteForm({ ...doctorNoteForm, recommendations: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {/* Prescription */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Prescription
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Enter prescription details..."
+                    value={doctorNoteForm.prescription}
+                    onChange={(e) => setDoctorNoteForm({ ...doctorNoteForm, prescription: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {/* Patient Status and Referral */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Patient Status
+                    </label>
+                    <select
+                      value={doctorNoteForm.patientStatus}
+                      onChange={(e) => setDoctorNoteForm({ ...doctorNoteForm, patientStatus: e.target.value as typeof doctorNoteForm.patientStatus })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="abnormal">Abnormal</option>
+                      <option value="critical">Critical</option>
+                      <option value="requires_followup">Requires Follow-up</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Referral Facility (if applicable)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter referral facility..."
+                      value={doctorNoteForm.referralFacility}
+                      onChange={(e) => setDoctorNoteForm({ ...doctorNoteForm, referralFacility: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Next Appointment */}
+                {doctorNoteForm.patientStatus === "requires_followup" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Next Appointment Date
+                    </label>
+                    <input
+                      type="date"
+                      value={doctorNoteForm.nextAppointment}
+                      onChange={(e) => setDoctorNoteForm({ ...doctorNoteForm, nextAppointment: e.target.value })}
+                      min={new Date().toISOString().split("T")[0]}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowDoctorNoteModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    disabled={doctorNoteLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={doctorNoteLoading}
+                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 flex items-center justify-center gap-2"
+                  >
+                    {doctorNoteLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Assessment"
+                    )}
                   </button>
                 </div>
               </form>

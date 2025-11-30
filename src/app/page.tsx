@@ -4,6 +4,8 @@ import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
+import { isClinicalRole } from '@/lib/permissions';
+import type { UserRoleType } from '@/types';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,8 +20,17 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await api.login(email, password);
-      router.push('/dashboard');
+      const response = await api.login(email, password);
+      const userRole = response.user.role?.id as UserRoleType;
+
+      // Redirect based on role: admin to admin dashboard, clinical roles to clinical dashboard
+      if (userRole === 'admin') {
+        router.push('/dashboard');
+      } else if (isClinicalRole(userRole)) {
+        router.push('/dashboard/clinical');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
