@@ -96,20 +96,48 @@ export default function LoginPage() {
 
         <div className="mt-6 pt-6 border-t border-gray-200">
           <p className="text-sm text-gray-500 text-center mb-3">Quick Login (Demo Accounts)</p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
-              onClick={() => quickLogin('admin@lagosphc.gov.ng', '')}
+              onClick={() => quickLogin('adelaetomiwa6@gmail.com', 'Purewater@12345')}
               className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg"
             >
               Admin
             </button>
             <button
               type="button"
-              onClick={() => quickLogin('david.jolajesu@lagosstate.gov.ng', '')}
+              onClick={() => quickLogin('thetommedia@gmail.com', 'Purewater@12345')}
               className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg"
             >
               HIM Officer
+            </button>
+            <button
+              type="button"
+              onClick={() => quickLogin('tomiwaadelae6@gmail.com', 'Purewater@12345')}
+              className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg"
+            >
+              Nurse
+            </button>
+            <button
+              type="button"
+              onClick={() => quickLogin('thetomsshop@gmail.com', 'Purewater@12345')}
+              className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg"
+            >
+              Doctor
+            </button>
+            <button
+              type="button"
+              onClick={() => quickLogin('david@gmail.com', 'Purewater@12345')}
+              className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg"
+            >
+              CHO
+            </button>
+            <button
+              type="button"
+              onClick={() => quickLogin('john@gmail.com', 'Purewater@12345')}
+              className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg"
+            >
+              MLS
             </button>
           </div>
         </div>
