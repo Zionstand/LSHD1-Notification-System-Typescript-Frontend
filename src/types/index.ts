@@ -96,6 +96,7 @@ export interface Patient {
   next_of_kin_phone: string;
   facility_id: number;
   facility_name: string | null;
+  facility_address: string | null;
   lga: string | null;
   created_at: string;
 }
@@ -139,6 +140,7 @@ export interface NotificationType {
   id: number;
   name: string;
   pathway: string;
+  gender: 'all' | 'male' | 'female';
 }
 
 export interface ScreeningVitals {
@@ -494,6 +496,55 @@ export interface StaffUser {
 export interface UserActionResponse {
   message: string;
   user: StaffUser;
+}
+
+// Vital Records types (for multiple vitals recordings)
+export interface VitalRecord {
+  id: number;
+  patientId: number;
+  screeningId: number | null;
+  bloodPressure: {
+    systolic: number | null;
+    diastolic: number | null;
+    formatted: string | null;
+  };
+  temperature: number | null;
+  pulseRate: number | null;
+  respiratoryRate: number | null;
+  weight: number | null;
+  height: number | null;
+  bmi: number | null;
+  bloodSugar: {
+    random: number | null;
+    fasting: number | null;
+  };
+  notes: string | null;
+  recordedBy: {
+    id: number;
+    name: string;
+  } | null;
+  recordedAt: string;
+  createdAt: string;
+}
+
+export interface CreateVitalRecordDto {
+  patientId: number;
+  screeningId?: number;
+  systolicBp: number;
+  diastolicBp: number;
+  temperature?: number;
+  pulseRate?: number;
+  respiratoryRate?: number;
+  weight?: number;
+  height?: number;
+  bloodSugarRandom?: number;
+  bloodSugarFasting?: number;
+  notes?: string;
+}
+
+export interface VitalRecordsResponse {
+  count: number;
+  records: VitalRecord[];
 }
 
 // Follow-up types

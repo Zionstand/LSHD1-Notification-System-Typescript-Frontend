@@ -249,17 +249,14 @@ export function getScreeningActions(
 ): ActionButton[] {
   const allActions: ActionButton[] = [];
 
-  // Always available actions based on status
-  if (screeningStatus === 'pending' || screeningStatus === 'in_progress') {
-    // Record Vitals - available if vitals not yet recorded
-    allActions.push({
-      id: 'vitals',
-      label: 'Record Vitals',
-      icon: 'heart',
-      color: 'teal',
-      permission: 'vitals:record',
-    });
-  }
+  // Record Vitals - always available for users with permission (allows multiple recordings)
+  allActions.push({
+    id: 'vitals',
+    label: screeningStatus === 'pending' ? 'Record Vitals' : 'Add Vitals',
+    icon: 'heart',
+    color: 'teal',
+    permission: 'vitals:record',
+  });
 
   // Screening type specific actions - available for pending and in_progress
   if (screeningStatus === 'pending' || screeningStatus === 'in_progress') {

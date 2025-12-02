@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import api from '@/lib/api';
 import type { User, DashboardStats, Patient, Screening, NotificationType, CreatePatientDto, Appointment, CreateAppointmentDto, Facility, CreateFacilityDto, StaffUser, UserStatus } from '@/types';
 
@@ -371,8 +372,14 @@ export default function DashboardPage() {
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold">LS</span>
+            <div className="w-10 h-10 rounded-lg overflow-hidden">
+              <Image
+                src="/logo.png"
+                alt="LSHD1 Logo"
+                width={40}
+                height={40}
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-800">LSHD1 Screening System</h1>
@@ -955,7 +962,7 @@ export default function DashboardPage() {
                   <select
                     required
                     value={newClient.gender}
-                    onChange={(e) => setNewClient({ ...newClient, gender: e.target.value })}
+                    onChange={(e) => setNewClient({ ...newClient, gender: e.target.value, screeningTypeId: 0 })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Male">Male</option>
@@ -992,7 +999,12 @@ export default function DashboardPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Screening Type *</label>
                 <div className="grid grid-cols-1 gap-2">
-                  {notificationTypes.map((type) => (
+                  {notificationTypes
+                    .filter((type) => {
+                      const clientGender = newClient.gender.toLowerCase();
+                      return type.gender === 'all' || type.gender === clientGender;
+                    })
+                    .map((type) => (
                     <label
                       key={type.id}
                       className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
@@ -1018,10 +1030,9 @@ export default function DashboardPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Next of Kin Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Next of Kin Name <span className="text-gray-400">(optional)</span></label>
                   <input
                     type="text"
-                    required
                     value={newClient.nextOfKin}
                     onChange={(e) => setNewClient({ ...newClient, nextOfKin: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1029,10 +1040,9 @@ export default function DashboardPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Next of Kin Phone *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Next of Kin Phone <span className="text-gray-400">(optional)</span></label>
                   <input
                     type="tel"
-                    required
                     value={newClient.nextOfKinPhone}
                     onChange={(e) => setNewClient({ ...newClient, nextOfKinPhone: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1069,7 +1079,7 @@ export default function DashboardPage() {
       {/* Create Screening Modal */}
       {showScreeningModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">New Screening Session</h3>
             <form onSubmit={handleCreateScreening} className="space-y-4">
               <div>
@@ -1127,7 +1137,7 @@ export default function DashboardPage() {
       {/* Create Appointment Modal */}
       {showAppointmentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Schedule Appointment</h3>
             {appointmentError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
@@ -1228,7 +1238,7 @@ export default function DashboardPage() {
       {/* Create PHC Center Modal */}
       {showFacilityModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Add New PHC Center</h3>
             {facilityError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">

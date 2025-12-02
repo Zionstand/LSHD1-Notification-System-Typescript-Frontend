@@ -3,9 +3,11 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { hasPermission, Permission } from '@/lib/permissions';
 import type {
   Screening,
   Patient,
+  User,
   PathwayDataResponse,
   CreateHypertensionScreeningDto,
   CreateDiabetesScreeningDto,
@@ -20,6 +22,7 @@ import type {
   LymphNodeStatus,
   BreastRiskLevel,
   Laterality,
+  UserRoleType,
 } from '@/types';
 
 interface ScreeningDetail extends Screening {
@@ -51,6 +54,7 @@ export default function ScreeningDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   // Form states for different pathways
   const [hypertensionForm, setHypertensionForm] = useState<CreateHypertensionScreeningDto>({
@@ -91,10 +95,13 @@ export default function ScreeningDetailPage() {
     const fetchData = async () => {
       try {
         const token = localStorage.getItem('token');
-        if (!token) {
+        const userData = localStorage.getItem('user');
+        if (!token || !userData) {
           router.push('/');
           return;
         }
+
+        setUser(JSON.parse(userData));
 
         const screeningData = await api.getScreening(params.id as string);
         setScreening(screeningData as ScreeningDetail);
@@ -118,6 +125,35 @@ export default function ScreeningDetailPage() {
       fetchData();
     }
   }, [params.id, router]);
+
+  // Get the user's role for permission checks
+  const userRole = user?.role?.id as UserRoleType | undefined;
+
+  // Get the required permission for the current pathway
+  const getPathwayPermission = (pathway: string | undefined): Permission | null => {
+    switch (pathway) {
+      case 'hypertension':
+        return 'screening:hypertension:create';
+      case 'diabetes':
+        return 'lab:diabetes:create';
+      case 'cervical':
+        return 'screening:cervical:create';
+      case 'breast':
+        return 'screening:breast:create';
+      case 'psa':
+        return 'lab:psa:create';
+      default:
+        return null;
+    }
+  };
+
+  // Check if user can perform this screening
+  const canPerformScreening = (): boolean => {
+    const pathway = screening?.notificationType?.pathway;
+    const permission = getPathwayPermission(pathway);
+    if (!permission) return false;
+    return hasPermission(userRole, permission);
+  };
 
   const getStatusColor = (status: string): string => {
     switch (status) {
@@ -1039,9 +1075,27 @@ export default function ScreeningDetailPage() {
               </div>
             </div>
           ) : screening.status === 'pending' || screening.status === 'in_progress' ? (
-            // Show form to complete screening
+            // Show form to complete screening (only if user has permission)
             <div>
-              {!showPathwayForm ? (
+              {!canPerformScreening() ? (
+                // User doesn't have permission to perform this screening
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                    Screening Pending
+                  </h2>
+                  <p className="text-gray-600 mb-2">
+                    Status: {screening.status === 'in_progress' ? 'In Progress' : 'Pending'}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    You do not have permission to perform this {screening.notificationType?.name}.
+                  </p>
+                </div>
+              ) : !showPathwayForm ? (
                 <div className="text-center py-8">
                   <h2 className="text-lg font-semibold text-gray-900 mb-4">
                     Ready to Complete {screening.notificationType?.name}

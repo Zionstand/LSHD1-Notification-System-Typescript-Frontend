@@ -14,6 +14,7 @@ import type {
   CreateFollowupDto,
   FollowupAppointment,
   UserRoleType,
+  VitalRecord,
 } from "@/types";
 
 interface ScreeningHistory {
@@ -121,6 +122,25 @@ export default function PatientHistoryPage() {
     nextAppointment: "",
   });
 
+  // Vital records state
+  const [vitalRecords, setVitalRecords] = useState<VitalRecord[]>([]);
+  const [showVitalsModal, setShowVitalsModal] = useState(false);
+  const [vitalsLoading, setVitalsLoading] = useState(false);
+  const [vitalsError, setVitalsError] = useState<string | null>(null);
+  const [vitalsSuccess, setVitalsSuccess] = useState(false);
+  const [vitalsForm, setVitalsForm] = useState({
+    systolicBp: "",
+    diastolicBp: "",
+    temperature: "",
+    pulseRate: "",
+    respiratoryRate: "",
+    weight: "",
+    height: "",
+    bloodSugarRandom: "",
+    bloodSugarFasting: "",
+    notes: "",
+  });
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     const userData = localStorage.getItem("user");
@@ -138,15 +158,17 @@ export default function PatientHistoryPage() {
   const fetchData = async () => {
     try {
       const patientId = Number(params.id);
-      const [patientData, screeningsData, followupsData] = await Promise.all([
+      const [patientData, screeningsData, followupsData, vitalsData] = await Promise.all([
         api.getClient(patientId),
         api.getPatientScreenings(patientId),
         api.getFollowupsByPatient(patientId),
+        api.getPatientVitals(patientId),
       ]);
 
       setPatient(patientData);
       setScreenings(screeningsData as unknown as ScreeningHistory[]);
       setFollowups(followupsData);
+      setVitalRecords(vitalsData.records);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to fetch patient data"
@@ -338,6 +360,63 @@ export default function PatientHistoryPage() {
       );
     } finally {
       setDoctorNoteLoading(false);
+    }
+  };
+
+  // Vitals modal handlers
+  const openVitalsModal = () => {
+    setVitalsForm({
+      systolicBp: "",
+      diastolicBp: "",
+      temperature: "",
+      pulseRate: "",
+      respiratoryRate: "",
+      weight: "",
+      height: "",
+      bloodSugarRandom: "",
+      bloodSugarFasting: "",
+      notes: "",
+    });
+    setVitalsError(null);
+    setVitalsSuccess(false);
+    setShowVitalsModal(true);
+  };
+
+  const handleRecordVitals = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!patient) return;
+
+    setVitalsLoading(true);
+    setVitalsError(null);
+
+    try {
+      await api.createVitalRecord({
+        patientId: patient.id,
+        systolicBp: parseInt(vitalsForm.systolicBp),
+        diastolicBp: parseInt(vitalsForm.diastolicBp),
+        temperature: vitalsForm.temperature ? parseFloat(vitalsForm.temperature) : undefined,
+        pulseRate: vitalsForm.pulseRate ? parseInt(vitalsForm.pulseRate) : undefined,
+        respiratoryRate: vitalsForm.respiratoryRate ? parseInt(vitalsForm.respiratoryRate) : undefined,
+        weight: vitalsForm.weight ? parseFloat(vitalsForm.weight) : undefined,
+        height: vitalsForm.height ? parseFloat(vitalsForm.height) : undefined,
+        bloodSugarRandom: vitalsForm.bloodSugarRandom ? parseFloat(vitalsForm.bloodSugarRandom) : undefined,
+        bloodSugarFasting: vitalsForm.bloodSugarFasting ? parseFloat(vitalsForm.bloodSugarFasting) : undefined,
+        notes: vitalsForm.notes || undefined,
+      });
+
+      setVitalsSuccess(true);
+      fetchData();
+
+      setTimeout(() => {
+        setShowVitalsModal(false);
+        setVitalsSuccess(false);
+      }, 1500);
+    } catch (err) {
+      setVitalsError(
+        err instanceof Error ? err.message : "Failed to record vitals"
+      );
+    } finally {
+      setVitalsLoading(false);
     }
   };
 
@@ -693,10 +772,30 @@ export default function PatientHistoryPage() {
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">Vitals History</h3>
+                {hasPermission(userRole, "vitals:record") && (
+                  <button
+                    onClick={openVitalsModal}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 flex items-center gap-2"
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                      />
+                    </svg>
+                    Add Vitals
+                  </button>
+                )}
               </div>
 
-              {screenings.filter((s) => s.vitals?.bloodPressureSystolic)
-                .length === 0 ? (
+              {vitalRecords.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <svg
                     className="w-16 h-16 mx-auto mb-4 text-gray-300"
@@ -712,6 +811,14 @@ export default function PatientHistoryPage() {
                     />
                   </svg>
                   <p>No vitals recorded for this patient</p>
+                  {hasPermission(userRole, "vitals:record") && (
+                    <button
+                      onClick={openVitalsModal}
+                      className="mt-4 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+                    >
+                      Record First Vitals
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -719,7 +826,7 @@ export default function PatientHistoryPage() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Date
+                          Date & Time
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Blood Pressure
@@ -734,7 +841,7 @@ export default function PatientHistoryPage() {
                           Temp
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Weight
+                          Weight / BMI
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Recorded By
@@ -742,48 +849,50 @@ export default function PatientHistoryPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {screenings
-                        .filter((s) => s.vitals?.bloodPressureSystolic)
-                        .map((s) => {
-                          const bpCat = getBpCategory(
-                            s.vitals.bloodPressureSystolic,
-                            s.vitals.bloodPressureDiastolic
-                          );
-                          return (
-                            <tr key={s.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm text-gray-900">
-                                {formatDate(s.screeningDate)}
-                              </td>
-                              <td className="px-4 py-3 text-sm font-medium">
-                                {s.vitals.bloodPressureSystolic}/
-                                {s.vitals.bloodPressureDiastolic} mmHg
-                              </td>
-                              <td
-                                className={`px-4 py-3 text-sm ${bpCat.color}`}
-                              >
-                                {bpCat.label}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-500">
-                                {s.vitals.pulseRate
-                                  ? `${s.vitals.pulseRate} bpm`
-                                  : "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-500">
-                                {s.vitals.temperature
-                                  ? `${s.vitals.temperature}°C`
-                                  : "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-500">
-                                {s.vitals.weight
-                                  ? `${s.vitals.weight} kg`
-                                  : "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-500">
-                                {s.conductedBy || "-"}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                      {vitalRecords.map((record) => {
+                        const bpCat = getBpCategory(
+                          record.bloodPressure.systolic ?? undefined,
+                          record.bloodPressure.diastolic ?? undefined
+                        );
+                        return (
+                          <tr key={record.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {formatDateTime(record.recordedAt)}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-medium">
+                              {record.bloodPressure.formatted || "-"}
+                            </td>
+                            <td
+                              className={`px-4 py-3 text-sm ${bpCat.color}`}
+                            >
+                              {bpCat.label}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {record.pulseRate
+                                ? `${record.pulseRate} bpm`
+                                : "-"}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {record.temperature
+                                ? `${record.temperature}°C`
+                                : "-"}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {record.weight
+                                ? `${record.weight} kg`
+                                : "-"}
+                              {record.bmi && (
+                                <span className="ml-1 text-xs text-gray-400">
+                                  (BMI: {record.bmi})
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {record.recordedBy?.name || "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1445,7 +1554,7 @@ export default function PatientHistoryPage() {
       {/* Follow-up Scheduling Modal */}
       {showFollowupModal && patient && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Schedule Follow-up</h3>
               <button
@@ -1677,7 +1786,7 @@ export default function PatientHistoryPage() {
       {/* SMS Modal */}
       {showSmsModal && patient && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold flex items-center gap-2">
                 <svg
@@ -1777,22 +1886,32 @@ export default function PatientHistoryPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        const facilityInfo = patient.facility_name
+                          ? (patient.facility_address
+                            ? `${patient.facility_name}, ${patient.facility_address}`
+                            : patient.facility_name)
+                          : 'your PHC center';
                         setSmsMessage(
-                          `Dear ${patient.full_name}, this is a reminder about your upcoming appointment. Please visit your PHC center. - LSHD1`
-                        )
-                      }
+                          `Dear ${patient.full_name}, this is a reminder about your upcoming appointment. Please visit ${facilityInfo}. - LSHD1`
+                        );
+                      }}
                       className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200"
                     >
                       Appointment Reminder
                     </button>
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        const facilityInfo = patient.facility_name
+                          ? (patient.facility_address
+                            ? `${patient.facility_name}, ${patient.facility_address}`
+                            : patient.facility_name)
+                          : 'your PHC center';
                         setSmsMessage(
-                          `Dear ${patient.full_name}, your test results are ready. Please visit your PHC center to collect them. - LSHD1`
-                        )
-                      }
+                          `Dear ${patient.full_name}, your test results are ready. Please visit ${facilityInfo} to collect them. - LSHD1`
+                        );
+                      }}
                       className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200"
                     >
                       Results Ready
@@ -1877,7 +1996,7 @@ export default function PatientHistoryPage() {
       {/* Doctor's Note Modal */}
       {showDoctorNoteModal && selectedScreeningForNote && patient && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl w-full max-w-2xl p-6 my-8">
+          <div className="bg-white rounded-xl w-full max-w-2xl p-6 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Doctor&apos;s Assessment Note</h3>
               <button
@@ -2058,6 +2177,263 @@ export default function PatientHistoryPage() {
                       </>
                     ) : (
                       "Save Assessment"
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Vitals Recording Modal */}
+      {showVitalsModal && patient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl w-full max-w-2xl p-6 my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <svg
+                  className="w-6 h-6 text-teal-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                  />
+                </svg>
+                Record Vitals
+              </h3>
+              <button
+                onClick={() => setShowVitalsModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mb-4 p-3 bg-teal-50 rounded-lg border border-teal-200">
+              <p className="text-sm text-teal-700">
+                <strong>Patient:</strong> {patient.full_name} ({patient.client_id})
+              </p>
+            </div>
+
+            {vitalsSuccess && (
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-2">
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                Vitals recorded successfully!
+              </div>
+            )}
+
+            {vitalsError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {vitalsError}
+              </div>
+            )}
+
+            {!vitalsSuccess && (
+              <form onSubmit={handleRecordVitals} className="space-y-4">
+                {/* Blood Pressure - Required */}
+                <div className="border rounded-lg p-4 bg-red-50">
+                  <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    Blood Pressure *
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Systolic (mmHg)</label>
+                      <input
+                        type="number"
+                        required
+                        min="60"
+                        max="250"
+                        value={vitalsForm.systolicBp}
+                        onChange={(e) => setVitalsForm({ ...vitalsForm, systolicBp: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                        placeholder="e.g., 120"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Diastolic (mmHg)</label>
+                      <input
+                        type="number"
+                        required
+                        min="40"
+                        max="150"
+                        value={vitalsForm.diastolicBp}
+                        onChange={(e) => setVitalsForm({ ...vitalsForm, diastolicBp: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                        placeholder="e.g., 80"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Other Vitals - Optional */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Temperature (°C)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="30"
+                      max="45"
+                      value={vitalsForm.temperature}
+                      onChange={(e) => setVitalsForm({ ...vitalsForm, temperature: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                      placeholder="e.g., 36.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pulse Rate (bpm)</label>
+                    <input
+                      type="number"
+                      min="30"
+                      max="200"
+                      value={vitalsForm.pulseRate}
+                      onChange={(e) => setVitalsForm({ ...vitalsForm, pulseRate: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                      placeholder="e.g., 72"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Respiratory Rate</label>
+                    <input
+                      type="number"
+                      min="8"
+                      max="60"
+                      value={vitalsForm.respiratoryRate}
+                      onChange={(e) => setVitalsForm({ ...vitalsForm, respiratoryRate: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                      placeholder="e.g., 16"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Weight (kg)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      max="500"
+                      value={vitalsForm.weight}
+                      onChange={(e) => setVitalsForm({ ...vitalsForm, weight: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                      placeholder="e.g., 70"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Height (cm)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="30"
+                      max="300"
+                      value={vitalsForm.height}
+                      onChange={(e) => setVitalsForm({ ...vitalsForm, height: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                      placeholder="e.g., 170"
+                    />
+                  </div>
+                </div>
+
+                {/* Blood Sugar */}
+                <div className="border rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-3">Blood Sugar (Optional)</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Random (mg/dL)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="1"
+                        max="1000"
+                        value={vitalsForm.bloodSugarRandom}
+                        onChange={(e) => setVitalsForm({ ...vitalsForm, bloodSugarRandom: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                        placeholder="Random blood sugar"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Fasting (mg/dL)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="1"
+                        max="1000"
+                        value={vitalsForm.bloodSugarFasting}
+                        onChange={(e) => setVitalsForm({ ...vitalsForm, bloodSugarFasting: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                        placeholder="Fasting blood sugar"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    value={vitalsForm.notes}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, notes: e.target.value })}
+                    rows={2}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                    placeholder="Additional observations..."
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowVitalsModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    disabled={vitalsLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={vitalsLoading}
+                    className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:bg-teal-400 flex items-center justify-center gap-2"
+                  >
+                    {vitalsLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Recording...
+                      </>
+                    ) : (
+                      "Record Vitals"
                     )}
                   </button>
                 </div>

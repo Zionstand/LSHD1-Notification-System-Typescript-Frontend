@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import api from "@/lib/api";
 import {
   hasPermission,
@@ -43,6 +44,9 @@ interface DashboardStats {
 interface VitalsForm extends UpdateVitalsDto {
   height?: number;
   respiratoryRate?: number;
+  bloodSugarRandom?: number;
+  bloodSugarFasting?: number;
+  notes?: string;
 }
 
 interface AssessmentForm {
@@ -119,6 +123,9 @@ const initialVitalsForm: VitalsForm = {
   temperature: undefined,
   height: undefined,
   respiratoryRate: undefined,
+  bloodSugarRandom: undefined,
+  bloodSugarFasting: undefined,
+  notes: "",
 };
 
 const initialAssessmentForm: AssessmentForm = {
@@ -194,26 +201,30 @@ const initialClientForm: CreatePatientDto = {
 };
 
 const SCREENING_TYPES = [
-  { id: 2, name: "Diabetes Screening", description: "Blood sugar testing" },
+  { id: 2, name: "Diabetes Screening", description: "Blood sugar testing", gender: "all" as const },
   {
     id: 1,
     name: "Hypertension Screening",
     description: "Blood pressure monitoring",
+    gender: "all" as const,
   },
   {
     id: 3,
     name: "Cervical Cancer Screening",
     description: "Pap smear/HPV test (Women 25-65)",
+    gender: "female" as const,
   },
   {
     id: 4,
     name: "Breast Cancer Screening",
     description: "Clinical examination (Women 20+)",
+    gender: "female" as const,
   },
   {
     id: 5,
     name: "Prostate Cancer Screening",
     description: "PSA test (Men 45+)",
+    gender: "male" as const,
   },
 ];
 
@@ -423,7 +434,7 @@ export default function ClinicalDashboardPage() {
     setFormSuccess(false);
   };
 
-  // Vitals submission
+  // Vitals submission - now creates a new vital record (allows multiple recordings)
   const handleRecordVitals = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedScreening) return;
@@ -437,12 +448,20 @@ export default function ClinicalDashboardPage() {
     setFormLoading(true);
 
     try {
-      await api.updateVitals(selectedScreening.id, {
+      // Create a new vital record (allows multiple recordings per screening)
+      await api.createVitalRecord({
+        patientId: selectedScreening.client.id,
+        screeningId: selectedScreening.id,
         systolicBp: vitalsForm.systolicBp,
         diastolicBp: vitalsForm.diastolicBp,
         weight: vitalsForm.weight,
         pulseRate: vitalsForm.pulseRate,
         temperature: vitalsForm.temperature,
+        height: vitalsForm.height,
+        respiratoryRate: vitalsForm.respiratoryRate,
+        bloodSugarRandom: vitalsForm.bloodSugarRandom,
+        bloodSugarFasting: vitalsForm.bloodSugarFasting,
+        notes: vitalsForm.notes || undefined,
       });
 
       setFormSuccess(true);
@@ -865,20 +884,14 @@ export default function ClinicalDashboardPage() {
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <svg
-                className="w-6 h-6 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                />
-              </svg>
+            <div className="w-10 h-10 rounded-lg overflow-hidden">
+              <Image
+                src="/logo.png"
+                alt="LSHD1 Logo"
+                width={40}
+                height={40}
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-800">
@@ -1300,7 +1313,7 @@ export default function ClinicalDashboardPage() {
       {/* Vitals Modal */}
       {activeModal === "vitals" && selectedScreening && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Record Vital Signs</h3>
               <button
@@ -1483,27 +1496,106 @@ export default function ClinicalDashboardPage() {
                   </div>
                 </div>
 
-                {/* Temperature */}
+                {/* Temperature and Respiratory Rate */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Temperature (°C)
+                    </label>
+                    <input
+                      type="number"
+                      min="35"
+                      max="42"
+                      step="0.1"
+                      placeholder="e.g., 36.5"
+                      value={vitalsForm.temperature || ""}
+                      onChange={(e) =>
+                        setVitalsForm({
+                          ...vitalsForm,
+                          temperature: parseFloat(e.target.value) || undefined,
+                        })
+                      }
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Respiratory Rate (bpm)
+                    </label>
+                    <input
+                      type="number"
+                      min="8"
+                      max="60"
+                      placeholder="e.g., 16"
+                      value={vitalsForm.respiratoryRate || ""}
+                      onChange={(e) =>
+                        setVitalsForm({
+                          ...vitalsForm,
+                          respiratoryRate: parseInt(e.target.value) || undefined,
+                        })
+                      }
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Height */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Temperature (°C)
+                    Height (cm)
                   </label>
                   <input
                     type="number"
-                    min="35"
-                    max="42"
+                    min="30"
+                    max="250"
                     step="0.1"
-                    placeholder="e.g., 36.5"
-                    value={vitalsForm.temperature || ""}
+                    placeholder="e.g., 170"
+                    value={vitalsForm.height || ""}
                     onChange={(e) =>
                       setVitalsForm({
                         ...vitalsForm,
-                        temperature: parseFloat(e.target.value) || undefined,
+                        height: parseFloat(e.target.value) || undefined,
                       })
                     }
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes (optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Any observations or notes..."
+                    value={vitalsForm.notes || ""}
+                    onChange={(e) =>
+                      setVitalsForm({
+                        ...vitalsForm,
+                        notes: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {/* Previous Vitals Info */}
+                {selectedScreening.vitals?.bloodPressureSystolic && (
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <p className="text-sm font-medium text-gray-700 mb-1">
+                      Previous Recording:
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      BP: {selectedScreening.vitals.bloodPressureSystolic}/{selectedScreening.vitals.bloodPressureDiastolic} mmHg
+                      {selectedScreening.vitals.pulseRate && ` | Pulse: ${selectedScreening.vitals.pulseRate} bpm`}
+                      {selectedScreening.vitals.temperature && ` | Temp: ${selectedScreening.vitals.temperature}°C`}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Recording new vitals will add to the history, not replace.
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-4">
                   <button
@@ -1538,7 +1630,7 @@ export default function ClinicalDashboardPage() {
       {/* Assessment Modal */}
       {activeModal === "assessment" && selectedScreening && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl w-full max-w-2xl p-6 my-8">
+          <div className="bg-white rounded-xl w-full max-w-2xl p-6 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">
                 Doctor&apos;s Assessment
@@ -1791,7 +1883,7 @@ export default function ClinicalDashboardPage() {
       {/* Diabetes Screening Modal */}
       {activeModal === "diabetes" && selectedScreening && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Diabetes Screening</h3>
               <button
@@ -2058,7 +2150,7 @@ export default function ClinicalDashboardPage() {
       {/* PSA Screening Modal */}
       {activeModal === "psa" && selectedScreening && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">PSA Screening</h3>
               <button
@@ -2358,7 +2450,7 @@ export default function ClinicalDashboardPage() {
       {/* Hypertension Screening Modal */}
       {activeModal === "hypertension" && selectedScreening && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Hypertension Screening</h3>
               <button
@@ -2726,7 +2818,7 @@ export default function ClinicalDashboardPage() {
       {/* Cervical Cancer Screening Modal */}
       {activeModal === "cervical" && selectedScreening && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Cervical Cancer Screening</h3>
               <button
@@ -3053,7 +3145,7 @@ export default function ClinicalDashboardPage() {
       {/* Client Registration Modal */}
       {showClientModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl w-full max-w-2xl p-6 my-8">
+          <div className="bg-white rounded-xl w-full max-w-2xl p-6 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Register New Client</h3>
               <button
@@ -3173,7 +3265,7 @@ export default function ClinicalDashboardPage() {
                       required
                       value={newClient.gender}
                       onChange={(e) =>
-                        setNewClient({ ...newClient, gender: e.target.value })
+                        setNewClient({ ...newClient, gender: e.target.value, screeningTypeId: 0 })
                       }
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
                     >
@@ -3230,7 +3322,12 @@ export default function ClinicalDashboardPage() {
                     Screening Type *
                   </label>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {SCREENING_TYPES.map((type) => (
+                    {SCREENING_TYPES
+                      .filter((type) => {
+                        const clientGender = newClient.gender.toLowerCase();
+                        return type.gender === 'all' || type.gender === clientGender;
+                      })
+                      .map((type) => (
                       <label
                         key={type.id}
                         className={`flex items-start p-3 border rounded-lg cursor-pointer transition ${
@@ -3270,11 +3367,10 @@ export default function ClinicalDashboardPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Next of Kin Name *
+                      Next of Kin Name <span className="text-gray-400">(optional)</span>
                     </label>
                     <input
                       type="text"
-                      required
                       value={newClient.nextOfKin}
                       onChange={(e) =>
                         setNewClient({
@@ -3288,11 +3384,10 @@ export default function ClinicalDashboardPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Next of Kin Phone *
+                      Next of Kin Phone <span className="text-gray-400">(optional)</span>
                     </label>
                     <input
                       type="tel"
-                      required
                       value={newClient.nextOfKinPhone}
                       onChange={(e) =>
                         setNewClient({
@@ -3336,7 +3431,7 @@ export default function ClinicalDashboardPage() {
       {/* Routing Modal */}
       {showRoutingModal && selectedClient && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">
                 Route Client to Screening
@@ -3398,7 +3493,13 @@ export default function ClinicalDashboardPage() {
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">-- Select Screening Type --</option>
-                  {notificationTypes.map((t) => (
+                  {notificationTypes
+                    .filter((t) => {
+                      if (!selectedClient) return true;
+                      const clientGender = selectedClient.gender?.toLowerCase() || '';
+                      return t.gender === 'all' || t.gender === clientGender;
+                    })
+                    .map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
                     </option>

@@ -37,6 +37,10 @@ import type {
   // Follow-up types
   CreateFollowupDto,
   FollowupAppointment,
+  // Vital records types
+  VitalRecord,
+  CreateVitalRecordDto,
+  VitalRecordsResponse,
 } from "@/types";
 
 const API_BASE_URL =
@@ -759,6 +763,43 @@ class APIClient {
     return this.request("/sms/process-reminders", {
       method: "POST",
     });
+  }
+
+  // ==================== VITAL RECORDS ENDPOINTS ====================
+
+  async createVitalRecord(
+    data: CreateVitalRecordDto
+  ): Promise<{ message: string; vitalRecord: VitalRecord }> {
+    return this.request("/vitals", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPatientVitals(patientId: number): Promise<VitalRecordsResponse> {
+    return this.request<VitalRecordsResponse>(`/vitals/patient/${patientId}`);
+  }
+
+  async getLatestPatientVitals(
+    patientId: number
+  ): Promise<{ record: VitalRecord | null }> {
+    return this.request(`/vitals/patient/${patientId}/latest`);
+  }
+
+  async getScreeningVitals(screeningId: number): Promise<VitalRecordsResponse> {
+    return this.request<VitalRecordsResponse>(
+      `/vitals/screening/${screeningId}`
+    );
+  }
+
+  async getLatestScreeningVitals(
+    screeningId: number
+  ): Promise<{ record: VitalRecord | null }> {
+    return this.request(`/vitals/screening/${screeningId}/latest`);
+  }
+
+  async getVitalRecord(id: number): Promise<{ record: VitalRecord }> {
+    return this.request(`/vitals/${id}`);
   }
 }
 
