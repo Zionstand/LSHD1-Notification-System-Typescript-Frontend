@@ -2,7 +2,6 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import api from "@/lib/api";
 import {
   hasPermission,
@@ -29,6 +28,7 @@ import type {
   CervicalResult,
   UserRoleType,
 } from "@/types";
+import { LOGO } from "@/constants";
 
 // ==================== INTERFACES ====================
 
@@ -201,7 +201,12 @@ const initialClientForm: CreatePatientDto = {
 };
 
 const SCREENING_TYPES = [
-  { id: 2, name: "Diabetes Screening", description: "Blood sugar testing", gender: "all" as const },
+  {
+    id: 2,
+    name: "Diabetes Screening",
+    description: "Blood sugar testing",
+    gender: "all" as const,
+  },
   {
     id: 1,
     name: "Hypertension Screening",
@@ -885,11 +890,9 @@ export default function ClinicalDashboardPage() {
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg overflow-hidden">
-              <Image
-                src="/logo.png"
+              <img
+                src={LOGO}
                 alt="LSHD1 Logo"
-                width={40}
-                height={40}
                 className="w-full h-full object-contain"
               />
             </div>
@@ -1531,7 +1534,8 @@ export default function ClinicalDashboardPage() {
                       onChange={(e) =>
                         setVitalsForm({
                           ...vitalsForm,
-                          respiratoryRate: parseInt(e.target.value) || undefined,
+                          respiratoryRate:
+                            parseInt(e.target.value) || undefined,
                         })
                       }
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
@@ -1587,9 +1591,12 @@ export default function ClinicalDashboardPage() {
                       Previous Recording:
                     </p>
                     <p className="text-sm text-gray-600">
-                      BP: {selectedScreening.vitals.bloodPressureSystolic}/{selectedScreening.vitals.bloodPressureDiastolic} mmHg
-                      {selectedScreening.vitals.pulseRate && ` | Pulse: ${selectedScreening.vitals.pulseRate} bpm`}
-                      {selectedScreening.vitals.temperature && ` | Temp: ${selectedScreening.vitals.temperature}°C`}
+                      BP: {selectedScreening.vitals.bloodPressureSystolic}/
+                      {selectedScreening.vitals.bloodPressureDiastolic} mmHg
+                      {selectedScreening.vitals.pulseRate &&
+                        ` | Pulse: ${selectedScreening.vitals.pulseRate} bpm`}
+                      {selectedScreening.vitals.temperature &&
+                        ` | Temp: ${selectedScreening.vitals.temperature}°C`}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       Recording new vitals will add to the history, not replace.
@@ -2820,7 +2827,9 @@ export default function ClinicalDashboardPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-xl w-full max-w-lg p-6 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Cervical Cancer Screening</h3>
+              <h3 className="text-lg font-semibold">
+                Cervical Cancer Screening
+              </h3>
               <button
                 onClick={closeModal}
                 className="text-gray-400 hover:text-gray-600"
@@ -2907,8 +2916,12 @@ export default function ClinicalDashboardPage() {
                     }
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-pink-500"
                   >
-                    <option value="via">VIA (Visual Inspection with Acetic Acid)</option>
-                    <option value="vili">VILI (Visual Inspection with Lugol&apos;s Iodine)</option>
+                    <option value="via">
+                      VIA (Visual Inspection with Acetic Acid)
+                    </option>
+                    <option value="vili">
+                      VILI (Visual Inspection with Lugol&apos;s Iodine)
+                    </option>
                     <option value="pap_smear">Pap Smear</option>
                     <option value="hpv_test">HPV Test</option>
                     <option value="other">Other</option>
@@ -3265,7 +3278,11 @@ export default function ClinicalDashboardPage() {
                       required
                       value={newClient.gender}
                       onChange={(e) =>
-                        setNewClient({ ...newClient, gender: e.target.value, screeningTypeId: 0 })
+                        setNewClient({
+                          ...newClient,
+                          gender: e.target.value,
+                          screeningTypeId: 0,
+                        })
                       }
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
                     >
@@ -3322,12 +3339,12 @@ export default function ClinicalDashboardPage() {
                     Screening Type *
                   </label>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {SCREENING_TYPES
-                      .filter((type) => {
-                        const clientGender = newClient.gender.toLowerCase();
-                        return type.gender === 'all' || type.gender === clientGender;
-                      })
-                      .map((type) => (
+                    {SCREENING_TYPES.filter((type) => {
+                      const clientGender = newClient.gender.toLowerCase();
+                      return (
+                        type.gender === "all" || type.gender === clientGender
+                      );
+                    }).map((type) => (
                       <label
                         key={type.id}
                         className={`flex items-start p-3 border rounded-lg cursor-pointer transition ${
@@ -3367,7 +3384,8 @@ export default function ClinicalDashboardPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Next of Kin Name <span className="text-gray-400">(optional)</span>
+                      Next of Kin Name{" "}
+                      <span className="text-gray-400">(optional)</span>
                     </label>
                     <input
                       type="text"
@@ -3384,7 +3402,8 @@ export default function ClinicalDashboardPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Next of Kin Phone <span className="text-gray-400">(optional)</span>
+                      Next of Kin Phone{" "}
+                      <span className="text-gray-400">(optional)</span>
                     </label>
                     <input
                       type="tel"
@@ -3496,14 +3515,15 @@ export default function ClinicalDashboardPage() {
                   {notificationTypes
                     .filter((t) => {
                       if (!selectedClient) return true;
-                      const clientGender = selectedClient.gender?.toLowerCase() || '';
-                      return t.gender === 'all' || t.gender === clientGender;
+                      const clientGender =
+                        selectedClient.gender?.toLowerCase() || "";
+                      return t.gender === "all" || t.gender === clientGender;
                     })
                     .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
                 </select>
               </div>
 

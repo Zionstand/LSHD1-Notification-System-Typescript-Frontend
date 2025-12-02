@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { api } from "@/lib/api";
 import type { UserRoleType } from "@/types";
+import { LOGO } from "@/constants";
 
 interface FormData {
   fullName: string;
@@ -205,7 +206,7 @@ export default function RegisterPage() {
         <div className="text-center mb-8">
           <div className="w-16 h-16 mx-auto mb-4">
             <Image
-              src="/logo.png"
+              src={LOGO}
               alt="LSHD1 Logo"
               width={64}
               height={64}
