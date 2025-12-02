@@ -58,7 +58,6 @@ export default function RegisterPage() {
   const [facilities, setFacilities] = useState<{ id: number; name: string }[]>(
     []
   );
-  console.log(facilities);
   const [facilitiesLoading, setFacilitiesLoading] = useState(false);
 
   useEffect(() => {
@@ -69,8 +68,6 @@ export default function RegisterPage() {
     }
   }, [router]);
 
-  console.log("first");
-
   useEffect(() => {
     // Fetch facilities for non-admin roles using public endpoint
     const fetchFacilities = async () => {
@@ -79,8 +76,6 @@ export default function RegisterPage() {
       setFacilitiesLoading(true);
       try {
         const data = await api.getPublicFacilities();
-
-        console.log(data);
 
         setFacilities(data);
       } catch (error) {
