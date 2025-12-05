@@ -45,8 +45,8 @@ export default function RegisterPage() {
     email: "",
     phone: "",
     password: "",
-    confirmPassword: "",
     role: "him_officer",
+    confirmPassword: "",
     phcCenterId: "",
     staffId: "",
   });
