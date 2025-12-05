@@ -2,7 +2,7 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import api from "@/lib/api";
+import api, { AuditLog } from "@/lib/api";
 import type {
   User,
   DashboardStats,
@@ -42,6 +42,7 @@ export default function DashboardPage() {
     | "appointments"
     | "phc_centers"
     | "staff"
+    | "audit"
   >("dashboard");
   const [loading, setLoading] = useState(true);
   const [showClientModal, setShowClientModal] = useState(false);
@@ -89,6 +90,39 @@ export default function DashboardPage() {
   const [staffActionLoading, setStaffActionLoading] = useState<number | null>(
     null
   );
+  // Confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    confirmColor: string;
+    staffId: number | null;
+    action: "approve" | "reject" | "suspend" | "reactivate" | null;
+  }>({
+    show: false,
+    title: "",
+    message: "",
+    confirmText: "",
+    confirmColor: "",
+    staffId: null,
+    action: null,
+  });
+  // Audit log state
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditFilters, setAuditFilters] = useState<{
+    action: string;
+    resource: string;
+    startDate: string;
+    endDate: string;
+  }>({
+    action: "",
+    resource: "",
+    startDate: "",
+    endDate: "",
+  });
+  const [auditTotal, setAuditTotal] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -309,59 +343,130 @@ export default function DashboardPage() {
     }
   };
 
-  // Staff management handlers
-  const handleApproveUser = async (id: number) => {
-    setStaffActionLoading(id);
+  // Staff management handlers - show confirmation dialog
+  const showConfirmDialog = (
+    staffId: number,
+    action: "approve" | "reject" | "suspend" | "reactivate",
+    staffName: string
+  ) => {
+    const configs = {
+      approve: {
+        title: "Approve Staff Member",
+        message: `Are you sure you want to approve ${staffName}? They will be able to log in and access the system.`,
+        confirmText: "Approve",
+        confirmColor: "bg-green-600 hover:bg-green-700",
+      },
+      reject: {
+        title: "Reject Staff Member",
+        message: `Are you sure you want to reject ${staffName}? Their registration will be denied.`,
+        confirmText: "Reject",
+        confirmColor: "bg-red-600 hover:bg-red-700",
+      },
+      suspend: {
+        title: "Suspend Staff Member",
+        message: `Are you sure you want to suspend ${staffName}? They will no longer be able to access the system.`,
+        confirmText: "Suspend",
+        confirmColor: "bg-gray-600 hover:bg-gray-700",
+      },
+      reactivate: {
+        title: "Reactivate Staff Member",
+        message: `Are you sure you want to reactivate ${staffName}? They will be able to log in again.`,
+        confirmText: "Reactivate",
+        confirmColor: "bg-blue-600 hover:bg-blue-700",
+      },
+    };
+
+    const config = configs[action];
+    setConfirmDialog({
+      show: true,
+      title: config.title,
+      message: config.message,
+      confirmText: config.confirmText,
+      confirmColor: config.confirmColor,
+      staffId,
+      action,
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmDialog.staffId || !confirmDialog.action) return;
+
+    const { staffId, action } = confirmDialog;
+    setStaffActionLoading(staffId);
+    setConfirmDialog({ ...confirmDialog, show: false });
+
     try {
-      await api.approveUser(id);
+      switch (action) {
+        case "approve":
+          await api.approveUser(staffId);
+          break;
+        case "reject":
+          await api.rejectUser(staffId);
+          break;
+        case "suspend":
+          await api.suspendUser(staffId);
+          break;
+        case "reactivate":
+          await api.reactivateUser(staffId);
+          break;
+      }
       fetchData();
     } catch (err) {
-      console.error("Approve user error:", err);
+      console.error(`${action} user error:`, err);
     } finally {
       setStaffActionLoading(null);
     }
   };
 
-  const handleRejectUser = async (id: number) => {
-    setStaffActionLoading(id);
-    try {
-      await api.rejectUser(id);
-      fetchData();
-    } catch (err) {
-      console.error("Reject user error:", err);
-    } finally {
-      setStaffActionLoading(null);
-    }
-  };
-
-  const handleSuspendUser = async (id: number) => {
-    setStaffActionLoading(id);
-    try {
-      await api.suspendUser(id);
-      fetchData();
-    } catch (err) {
-      console.error("Suspend user error:", err);
-    } finally {
-      setStaffActionLoading(null);
-    }
-  };
-
-  const handleReactivateUser = async (id: number) => {
-    setStaffActionLoading(id);
-    try {
-      await api.reactivateUser(id);
-      fetchData();
-    } catch (err) {
-      console.error("Reactivate user error:", err);
-    } finally {
-      setStaffActionLoading(null);
-    }
+  const handleCancelConfirm = () => {
+    setConfirmDialog({
+      show: false,
+      title: "",
+      message: "",
+      confirmText: "",
+      confirmColor: "",
+      staffId: null,
+      action: null,
+    });
   };
 
   const filteredStaffUsers =
     staffFilter === "all"
       ? staffUsers
       : staffUsers.filter((u) => u.status === staffFilter);
+
+  // Fetch audit logs
+  const fetchAuditLogs = async () => {
+    setAuditLoading(true);
+    try {
+      const filters: {
+        action?: string;
+        resource?: string;
+        startDate?: string;
+        endDate?: string;
+        limit?: number;
+      } = { limit: 100 };
+      if (auditFilters.action) filters.action = auditFilters.action;
+      if (auditFilters.resource) filters.resource = auditFilters.resource;
+      if (auditFilters.startDate) filters.startDate = auditFilters.startDate;
+      if (auditFilters.endDate) filters.endDate = auditFilters.endDate;
+
+      const result = await api.getAuditLogs(filters);
+      setAuditLogs(result.data);
+      setAuditTotal(result.total);
+    } catch (err) {
+      console.error("Failed to fetch audit logs:", err);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  // Fetch audit logs when tab becomes active
+  useEffect(() => {
+    if (activeTab === "audit") {
+      fetchAuditLogs();
+    }
+  }, [activeTab, auditFilters]);
 
   const pendingCount = staffUsers.filter((u) => u.status === "pending").length;
 
@@ -407,6 +512,63 @@ export default function DashboardPage() {
       .split("_")
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
+  };
+
+  const getActionBadgeColor = (action: string) => {
+    switch (action) {
+      case "LOGIN":
+        return "bg-blue-100 text-blue-700";
+      case "LOGOUT":
+        return "bg-gray-100 text-gray-700";
+      case "LOGIN_FAILED":
+        return "bg-red-100 text-red-700";
+      case "CREATE":
+        return "bg-green-100 text-green-700";
+      case "UPDATE":
+        return "bg-yellow-100 text-yellow-700";
+      case "DELETE":
+        return "bg-red-100 text-red-700";
+      case "APPROVE":
+        return "bg-green-100 text-green-700";
+      case "REJECT":
+        return "bg-red-100 text-red-700";
+      case "SUSPEND":
+        return "bg-orange-100 text-orange-700";
+      case "REACTIVATE":
+        return "bg-blue-100 text-blue-700";
+      case "EXPORT":
+        return "bg-purple-100 text-purple-700";
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
+
+  const getResourceBadgeColor = (resource: string) => {
+    switch (resource) {
+      case "USER":
+        return "bg-purple-100 text-purple-700";
+      case "PATIENT":
+        return "bg-blue-100 text-blue-700";
+      case "SCREENING":
+        return "bg-green-100 text-green-700";
+      case "APPOINTMENT":
+        return "bg-yellow-100 text-yellow-700";
+      case "FACILITY":
+        return "bg-teal-100 text-teal-700";
+      case "VITALS":
+        return "bg-pink-100 text-pink-700";
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
+
+  const parseAuditDetails = (details: string | null) => {
+    if (!details) return null;
+    try {
+      return JSON.parse(details);
+    } catch {
+      return null;
+    }
   };
 
   if (loading) {
@@ -471,6 +633,7 @@ export default function DashboardPage() {
                 "appointments",
                 "phc_centers",
                 "staff",
+                "audit",
               ] as const
             ).map((tab) => (
               <button
@@ -484,6 +647,8 @@ export default function DashboardPage() {
               >
                 {tab === "phc_centers"
                   ? "PHC Centers"
+                  : tab === "audit"
+                  ? "Audit Logs"
                   : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 {tab === "staff" && pendingCount > 0 && (
                   <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
@@ -546,6 +711,163 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+
+            {/* Pending Staff Approvals Section */}
+            {pendingCount > 0 && (
+              <div className="bg-white rounded-xl shadow">
+                <div className="p-6 border-b flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                      <svg
+                        className="w-5 h-5 text-yellow-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">
+                        Pending Staff Approvals
+                      </h2>
+                      <p className="text-sm text-gray-500">
+                        {pendingCount} staff member{pendingCount > 1 ? "s" : ""} awaiting your review
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("staff")}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm"
+                  >
+                    View All
+                  </button>
+                </div>
+                <div className="p-6">
+                  <div className="space-y-4">
+                    {staffUsers
+                      .filter((u) => u.status === "pending")
+                      .slice(0, 5)
+                      .map((staff) => (
+                        <div
+                          key={staff.id}
+                          className="flex items-center justify-between p-4 bg-yellow-50 border border-yellow-100 rounded-lg"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-yellow-200 rounded-full flex items-center justify-center">
+                              <span className="text-yellow-700 font-semibold text-sm">
+                                {staff.fullName?.charAt(0)?.toUpperCase() || "?"}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {staff.fullName}
+                              </p>
+                              <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-xs ${getRoleBadgeColor(
+                                    staff.role
+                                  )}`}
+                                >
+                                  {formatRoleName(staff.role)}
+                                </span>
+                                <span>•</span>
+                                <span>{staff.email}</span>
+                                {staff.phone && (
+                                  <>
+                                    <span>•</span>
+                                    <span>{staff.phone}</span>
+                                  </>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400 mt-1">
+                                Registered:{" "}
+                                {new Date(staff.createdAt).toLocaleDateString("en-NG", {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                                {staff.facility && ` • Facility: ${staff.facility}`}
+                                {staff.staffId && ` • Staff ID: ${staff.staffId}`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            {staffActionLoading === staff.id ? (
+                              <div className="w-5 h-5 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    showConfirmDialog(staff.id, "approve", staff.fullName)
+                                  }
+                                  className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1"
+                                >
+                                  <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    showConfirmDialog(staff.id, "reject", staff.fullName)
+                                  }
+                                  className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-1"
+                                >
+                                  <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M6 18L18 6M6 6l12 12"
+                                    />
+                                  </svg>
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                  {pendingCount > 5 && (
+                    <div className="mt-4 text-center">
+                      <button
+                        onClick={() => {
+                          setStaffFilter("pending");
+                          setActiveTab("staff");
+                        }}
+                        className="text-yellow-600 hover:text-yellow-700 text-sm font-medium"
+                      >
+                        View all {pendingCount} pending approvals →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Recent Screenings */}
             <div className="bg-white rounded-xl shadow">
@@ -1093,14 +1415,14 @@ export default function DashboardPage() {
                                   <>
                                     <button
                                       onClick={() =>
-                                        handleApproveUser(staff.id)
+                                        showConfirmDialog(staff.id, "approve", staff.fullName)
                                       }
                                       className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
                                     >
                                       Approve
                                     </button>
                                     <button
-                                      onClick={() => handleRejectUser(staff.id)}
+                                      onClick={() => showConfirmDialog(staff.id, "reject", staff.fullName)}
                                       className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
                                     >
                                       Reject
@@ -1111,7 +1433,7 @@ export default function DashboardPage() {
                                   staff.role !== "admin" && (
                                     <button
                                       onClick={() =>
-                                        handleSuspendUser(staff.id)
+                                        showConfirmDialog(staff.id, "suspend", staff.fullName)
                                       }
                                       className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
                                     >
@@ -1122,7 +1444,7 @@ export default function DashboardPage() {
                                   staff.status === "rejected") && (
                                   <button
                                     onClick={() =>
-                                      handleReactivateUser(staff.id)
+                                      showConfirmDialog(staff.id, "reactivate", staff.fullName)
                                     }
                                     className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                                   >
@@ -1145,6 +1467,283 @@ export default function DashboardPage() {
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Audit Logs Tab */}
+        {activeTab === "audit" && (
+          <div className="space-y-6">
+            {/* Filters */}
+            <div className="bg-white rounded-xl shadow p-6">
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Action
+                  </label>
+                  <select
+                    value={auditFilters.action}
+                    onChange={(e) =>
+                      setAuditFilters({ ...auditFilters, action: e.target.value })
+                    }
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">All Actions</option>
+                    <option value="LOGIN">Login</option>
+                    <option value="LOGOUT">Logout</option>
+                    <option value="LOGIN_FAILED">Login Failed</option>
+                    <option value="CREATE">Create</option>
+                    <option value="UPDATE">Update</option>
+                    <option value="DELETE">Delete</option>
+                    <option value="APPROVE">Approve</option>
+                    <option value="REJECT">Reject</option>
+                    <option value="SUSPEND">Suspend</option>
+                    <option value="REACTIVATE">Reactivate</option>
+                    <option value="EXPORT">Export</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Resource
+                  </label>
+                  <select
+                    value={auditFilters.resource}
+                    onChange={(e) =>
+                      setAuditFilters({ ...auditFilters, resource: e.target.value })
+                    }
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">All Resources</option>
+                    <option value="USER">User</option>
+                    <option value="PATIENT">Patient</option>
+                    <option value="SCREENING">Screening</option>
+                    <option value="APPOINTMENT">Appointment</option>
+                    <option value="FACILITY">Facility</option>
+                    <option value="VITALS">Vitals</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={auditFilters.startDate}
+                    onChange={(e) =>
+                      setAuditFilters({ ...auditFilters, startDate: e.target.value })
+                    }
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={auditFilters.endDate}
+                    onChange={(e) =>
+                      setAuditFilters({ ...auditFilters, endDate: e.target.value })
+                    }
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <button
+                  onClick={() =>
+                    setAuditFilters({
+                      action: "",
+                      resource: "",
+                      startDate: "",
+                      endDate: "",
+                    })
+                  }
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+
+            {/* Audit Logs Table */}
+            <div className="bg-white rounded-xl shadow">
+              <div className="p-6 border-b flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                    <svg
+                      className="w-5 h-5 text-indigo-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      Audit Logs
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {auditTotal} total log entries
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={fetchAuditLogs}
+                  disabled={auditLoading}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm flex items-center gap-2 disabled:bg-indigo-400"
+                >
+                  <svg
+                    className={`w-4 h-4 ${auditLoading ? "animate-spin" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Refresh
+                </button>
+              </div>
+              {auditLoading ? (
+                <div className="p-12 text-center">
+                  <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <p className="mt-4 text-gray-500">Loading audit logs...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Timestamp
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          User
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Action
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Resource
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Details
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {auditLogs.map((log) => {
+                        const details = parseAuditDetails(log.details);
+                        return (
+                          <tr key={log.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                              {new Date(log.createdAt).toLocaleString("en-NG", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </td>
+                            <td className="px-6 py-4">
+                              {log.user ? (
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {log.user.fullName}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {log.user.email}
+                                  </p>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-gray-400">System</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${getActionBadgeColor(
+                                  log.action
+                                )}`}
+                              >
+                                {log.action.replace("_", " ")}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${getResourceBadgeColor(
+                                  log.resource
+                                )}`}
+                              >
+                                {log.resource.replace("_", " ")}
+                              </span>
+                              {log.resourceId && (
+                                <span className="ml-2 text-xs text-gray-500">
+                                  #{log.resourceId}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-500 max-w-md">
+                              {details ? (
+                                <div className="space-y-1">
+                                  {details.staffName && (
+                                    <p>
+                                      <span className="font-medium">Staff:</span>{" "}
+                                      {details.staffName}
+                                    </p>
+                                  )}
+                                  {details.staffEmail && (
+                                    <p className="text-xs text-gray-400">
+                                      {details.staffEmail}
+                                    </p>
+                                  )}
+                                  {details.staffRole && (
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-xs ${getRoleBadgeColor(
+                                        details.staffRole
+                                      )}`}
+                                    >
+                                      {formatRoleName(details.staffRole)}
+                                    </span>
+                                  )}
+                                  {details.previousStatus && (
+                                    <p className="text-xs">
+                                      <span className="text-gray-400">
+                                        Previous status:
+                                      </span>{" "}
+                                      {details.previousStatus}
+                                    </p>
+                                  )}
+                                  {details.reason && (
+                                    <p className="text-xs text-gray-400">
+                                      {details.reason}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {auditLogs.length === 0 && (
+                    <p className="text-gray-500 text-center py-8">
+                      No audit logs found
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1695,6 +2294,59 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Action Confirmation Dialog */}
+      {confirmDialog.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                confirmDialog.action === "approve" ? "bg-green-100" :
+                confirmDialog.action === "reject" ? "bg-red-100" :
+                confirmDialog.action === "suspend" ? "bg-gray-100" :
+                "bg-blue-100"
+              }`}>
+                {confirmDialog.action === "approve" && (
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+                {confirmDialog.action === "reject" && (
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+                {confirmDialog.action === "suspend" && (
+                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                )}
+                {confirmDialog.action === "reactivate" && (
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">{confirmDialog.title}</h3>
+            </div>
+            <p className="text-gray-600 mb-6">{confirmDialog.message}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelConfirm}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmAction}
+                className={`flex-1 px-4 py-2 text-white rounded-lg font-medium ${confirmDialog.confirmColor}`}
+              >
+                {confirmDialog.confirmText}
+              </button>
+            </div>
           </div>
         </div>
       )}

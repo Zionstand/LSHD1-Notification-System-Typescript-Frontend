@@ -35,6 +35,14 @@ export type Permission =
   | 'appointment:create'
   | 'appointment:view'
   | 'appointment:edit'
+  // Divider Management (CHO feature)
+  | 'divider:create'
+  | 'divider:view'
+  | 'divider:edit'
+  // Volunteer Management (CHO feature)
+  | 'volunteer:create'
+  | 'volunteer:view'
+  | 'volunteer:edit'
   // Admin-only
   | 'staff:manage'
   | 'facility:manage'
@@ -70,22 +78,28 @@ const rolePermissions: Record<UserRoleType, Permission[]> = {
     'appointment:create',
     'appointment:view',
     'appointment:edit',
+    // Divider and Volunteer Management
+    'divider:create',
+    'divider:view',
+    'divider:edit',
+    'volunteer:create',
+    'volunteer:view',
+    'volunteer:edit',
     'staff:manage',
     'facility:manage',
     'system:admin',
   ],
 
   him_officer: [
-    // HIM Officers: Patient registration and routing
-    'patient:register',
-    'patient:view',
-    'patient:edit',
-    'screening:create',
-    'screening:view',
-    'screening:route',
-    'appointment:create',
-    'appointment:view',
-    'appointment:edit',
+    // HIM Officers: Patient registration, SMS notification, and activating screening sections
+    // RESTRICTED: All other functions not listed below
+    'patient:register',      // ✅ ALLOWED - Patient Registration
+    'patient:view',          // ✅ ALLOWED - View patient info (needed for registration flow)
+    'screening:create',      // ✅ ALLOWED - Activating New Screening Sections
+    'screening:view',        // ✅ ALLOWED - View screenings
+    'screening:route',       // ✅ ALLOWED - Route screenings
+    'appointment:create',    // ✅ ALLOWED - SMS Notification (create appointments triggers SMS)
+    'appointment:view',      // ✅ ALLOWED - View appointments
     // Can view but not edit clinical data
     'vitals:view',
     'assessment:view',
@@ -94,6 +108,8 @@ const rolePermissions: Record<UserRoleType, Permission[]> = {
     'screening:hypertension:view',
     'screening:cervical:view',
     'screening:breast:view',
+    // REMOVED: 'patient:edit' - HIM should NOT edit patient records
+    // REMOVED: 'appointment:edit' - HIM should NOT edit appointments
   ],
 
   nurse: [
@@ -174,6 +190,13 @@ const rolePermissions: Record<UserRoleType, Permission[]> = {
     'screening:cervical:view',
     'screening:breast:view',
     'appointment:view',
+    // CHO-specific features: Divider Capture and Volunteer Management
+    'divider:create',
+    'divider:view',
+    'divider:edit',
+    'volunteer:create',
+    'volunteer:view',
+    'volunteer:edit',
   ],
 };
 

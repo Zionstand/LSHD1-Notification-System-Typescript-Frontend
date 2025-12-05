@@ -567,3 +567,70 @@ export interface FollowupAppointment extends Appointment {
   reminderScheduledDate: string | null;
   screeningId: number | null;
 }
+
+// Divider types (CHO Feature)
+export type DividerStatus = 'active' | 'inactive';
+
+export interface Divider {
+  id: number;
+  dividerCode: string;
+  fullName: string;
+  phone: string | null;
+  address: string | null;
+  lga: string | null;
+  ward: string | null;
+  community: string | null;
+  notes: string | null;
+  status: DividerStatus;
+  facility: {
+    id: number;
+    name: string;
+  } | null;
+  capturedBy: {
+    id: number;
+    name: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Volunteer types (CHO Feature)
+export type VolunteerStatus = 'active' | 'inactive' | 'pending';
+export type VolunteerGender = 'male' | 'female';
+
+export interface Volunteer {
+  id: number;
+  volunteerCode: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  altPhone: string | null;
+  email: string | null;
+  gender: VolunteerGender;
+  age: number | null;
+  dateOfBirth: string | null;
+  address: string | null;
+  lga: string | null;
+  ward: string | null;
+  community: string | null;
+  occupation: string | null;
+  educationLevel: string | null;
+  nextOfKin: string | null;
+  nextOfKinPhone: string | null;
+  skills: string | null;
+  notes: string | null;
+  status: VolunteerStatus;
+  trainingCompleted: boolean;
+  trainingDate: string | null;
+  facility: {
+    id: number;
+    name: string;
+  } | null;
+  registeredBy: {
+    id: number;
+    name: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}

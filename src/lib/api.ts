@@ -41,6 +41,9 @@ import type {
   VitalRecord,
   CreateVitalRecordDto,
   VitalRecordsResponse,
+  // Divider and Volunteer types
+  Divider,
+  Volunteer,
 } from "@/types";
 
 const API_BASE_URL =
@@ -801,6 +804,239 @@ class APIClient {
   async getVitalRecord(id: number): Promise<{ record: VitalRecord }> {
     return this.request(`/vitals/${id}`);
   }
+
+  // ==================== DIVIDER ENDPOINTS (CHO Feature) ====================
+
+  async createDivider(data: {
+    fullName: string;
+    phone?: string;
+    address?: string;
+    lga?: string;
+    ward?: string;
+    community?: string;
+    notes?: string;
+  }): Promise<{ message: string; divider: Divider }> {
+    return this.request("/dividers", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getDividers(filters?: {
+    status?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ total: number; dividers: Divider[] }> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.search) params.set("search", filters.search);
+    if (filters?.limit) params.set("limit", filters.limit.toString());
+    if (filters?.offset) params.set("offset", filters.offset.toString());
+    const queryString = params.toString();
+    return this.request(`/dividers${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async getDivider(id: number): Promise<Divider> {
+    return this.request(`/dividers/${id}`);
+  }
+
+  async updateDivider(
+    id: number,
+    data: Partial<{
+      fullName: string;
+      phone: string;
+      address: string;
+      lga: string;
+      ward: string;
+      community: string;
+      notes: string;
+      status: "active" | "inactive";
+    }>
+  ): Promise<{ message: string; divider: Divider }> {
+    return this.request(`/dividers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deactivateDivider(id: number): Promise<{ message: string; divider: Divider }> {
+    return this.request(`/dividers/${id}/deactivate`, { method: "PUT" });
+  }
+
+  async activateDivider(id: number): Promise<{ message: string; divider: Divider }> {
+    return this.request(`/dividers/${id}/activate`, { method: "PUT" });
+  }
+
+  async getDividerStats(): Promise<{ total: number; active: number; inactive: number }> {
+    return this.request("/dividers/stats");
+  }
+
+  // ==================== VOLUNTEER ENDPOINTS (CHO Feature) ====================
+
+  async createVolunteer(data: {
+    fullName: string;
+    phone: string;
+    gender: "male" | "female";
+    altPhone?: string;
+    email?: string;
+    age?: number;
+    dateOfBirth?: string;
+    address?: string;
+    lga?: string;
+    ward?: string;
+    community?: string;
+    occupation?: string;
+    educationLevel?: string;
+    nextOfKin?: string;
+    nextOfKinPhone?: string;
+    skills?: string;
+    notes?: string;
+  }): Promise<{ message: string; volunteer: Volunteer }> {
+    return this.request("/volunteers", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getVolunteers(filters?: {
+    status?: string;
+    gender?: string;
+    trained?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ total: number; volunteers: Volunteer[] }> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.gender) params.set("gender", filters.gender);
+    if (filters?.trained) params.set("trained", filters.trained);
+    if (filters?.search) params.set("search", filters.search);
+    if (filters?.limit) params.set("limit", filters.limit.toString());
+    if (filters?.offset) params.set("offset", filters.offset.toString());
+    const queryString = params.toString();
+    return this.request(`/volunteers${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async getVolunteer(id: number): Promise<Volunteer> {
+    return this.request(`/volunteers/${id}`);
+  }
+
+  async updateVolunteer(
+    id: number,
+    data: Partial<{
+      fullName: string;
+      phone: string;
+      altPhone: string;
+      email: string;
+      gender: "male" | "female";
+      age: number;
+      dateOfBirth: string;
+      address: string;
+      lga: string;
+      ward: string;
+      community: string;
+      occupation: string;
+      educationLevel: string;
+      nextOfKin: string;
+      nextOfKinPhone: string;
+      skills: string;
+      notes: string;
+      status: "active" | "inactive" | "pending";
+      trainingCompleted: boolean;
+      trainingDate: string;
+    }>
+  ): Promise<{ message: string; volunteer: Volunteer }> {
+    return this.request(`/volunteers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async activateVolunteer(id: number): Promise<{ message: string; volunteer: Volunteer }> {
+    return this.request(`/volunteers/${id}/activate`, { method: "PUT" });
+  }
+
+  async deactivateVolunteer(id: number): Promise<{ message: string; volunteer: Volunteer }> {
+    return this.request(`/volunteers/${id}/deactivate`, { method: "PUT" });
+  }
+
+  async markVolunteerTrainingCompleted(
+    id: number,
+    trainingDate?: string
+  ): Promise<{ message: string; volunteer: Volunteer }> {
+    return this.request(`/volunteers/${id}/training-completed`, {
+      method: "PUT",
+      body: JSON.stringify({ trainingDate }),
+    });
+  }
+
+  async getVolunteerStats(): Promise<{
+    total: number;
+    active: number;
+    inactive: number;
+    pending: number;
+    trained: number;
+    untrained: number;
+  }> {
+    return this.request("/volunteers/stats");
+  }
+
+  // ==================== AUDIT LOGS ====================
+
+  async getAuditLogs(filters?: {
+    userId?: number;
+    action?: string;
+    resource?: string;
+    resourceId?: number;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ data: AuditLog[]; total: number }> {
+    const params = new URLSearchParams();
+    if (filters?.userId) params.append("userId", String(filters.userId));
+    if (filters?.action) params.append("action", filters.action);
+    if (filters?.resource) params.append("resource", filters.resource);
+    if (filters?.resourceId) params.append("resourceId", String(filters.resourceId));
+    if (filters?.startDate) params.append("startDate", filters.startDate);
+    if (filters?.endDate) params.append("endDate", filters.endDate);
+    if (filters?.limit) params.append("limit", String(filters.limit));
+    if (filters?.offset) params.append("offset", String(filters.offset));
+
+    const queryString = params.toString();
+    return this.request(`/audit${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async getAuditStats(): Promise<{
+    totalLogs: number;
+    logsByAction: Record<string, number>;
+    logsByResource: Record<string, number>;
+    recentLogins: number;
+    failedLogins: number;
+  }> {
+    return this.request("/audit/stats");
+  }
+}
+
+// Audit Log type
+export interface AuditLog {
+  id: number;
+  userId: number | null;
+  action: string;
+  resource: string;
+  resourceId: number | null;
+  details: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  facilityId: number | null;
+  createdAt: string;
+  user?: {
+    id: number;
+    fullName: string;
+    email: string;
+    role: string;
+  };
 }
 
 // Create singleton instance
